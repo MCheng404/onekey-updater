@@ -18,7 +18,18 @@ fn enable_gpu_acceleration() {
     );
 }
 
+/// 解析命令行参数，判断是否为开机自启动模式。
+///
+/// 开机自启动时注册表会传入 `--autostart` 参数，此时应用应：
+/// - 主窗口默认隐藏
+/// - 后台静默检查更新
+/// - 有更新时才显示主窗口，无更新时保持后台运行
+fn is_autostart_mode() -> bool {
+    std::env::args().any(|arg| arg == "--autostart" || arg == "-a")
+}
+
 fn main() {
     enable_gpu_acceleration();
-    onekey_updater_lib::run()
+    let autostart = is_autostart_mode();
+    onekey_updater_lib::run(autostart)
 }

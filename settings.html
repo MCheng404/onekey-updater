@@ -97,7 +97,12 @@
               <span class="switch-track"><span class="switch-thumb"></span></span>
             </label>
           </div>
-          <p class="field-hint">开启后应用启动时自动扫描可更新项，无需手动点击。</p>
+          <div class="field-row" id="rowAutostartDelay">
+            <label for="rangeAutostartDelay">自启动检查延迟</label>
+            <input type="range" id="rangeAutostartDelay" min="0" max="120" step="1" />
+            <span class="field-value mono" id="valAutostartDelay"></span>
+          </div>
+          <p class="field-hint">开启后应用启动时自动扫描可更新项，无需手动点击。自启动延迟用于等待网络（如校园网认证）就绪后再检查。</p>
         </section>
 
         <section class="settings-section">

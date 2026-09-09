@@ -1,6 +1,6 @@
 [package]
 name = "onekey-updater"
-version = "0.1.0"
+version = "0.2.0"
 description = "系统一键更新工具"
 authors = ["Cookies"]
 edition = "2021"

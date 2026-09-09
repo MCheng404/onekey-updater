@@ -404,6 +404,26 @@ function bindAutoCheck(): void {
   }
 }
 
+/** 开机自启动检查延迟（秒） */
+function bindAutostartDelay(): void {
+  try {
+    const range = el<HTMLInputElement>('rangeAutostartDelay');
+    const val = el('valAutostartDelay');
+    range.value = String(appSettings.autostartDelay);
+    val.textContent = `${appSettings.autostartDelay}s`;
+
+    range.addEventListener('input', (e) => {
+      const seconds = Number((e.target as HTMLInputElement).value);
+      appSettings.autostartDelay = seconds;
+      val.textContent = `${seconds}s`;
+      saveSettings(appSettings);
+      broadcastSettings();
+    });
+  } catch (e) {
+    console.warn('[settings] 自启动延迟绑定失败', e);
+  }
+}
+
 function renderIgnoreList(): void {
   try {
     const container = el('ignoreList');
@@ -507,8 +527,9 @@ async function init(): Promise<void> {
     console.warn('[init] 图标控件初始化失败', e);
   }
 
-  /* 7. 自动检查 + 忽略列表 */
+  /* 7. 自动检查 + 忽略列表 + 自启动延迟 */
   bindAutoCheck();
+  bindAutostartDelay();
   renderIgnoreList();
 
   /* 8. 开机自启动 */

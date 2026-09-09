@@ -78,6 +78,8 @@ let busy = false;
 let scanned = false;
 let theme: ThemeState = loadTheme();
 let appSettings: AppSettings = loadSettings();
+/** 是否为开机自启动模式（--autostart 参数） */
+let isAutostart = false;
 
 function el<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -667,7 +669,14 @@ async function init() {
     console.error('[init] 主按钮绑定失败', e);
   }
 
-  /* 10. 环境探测（不阻塞主界面） */
+  /* 10. 启动模式检测（开机自启动 vs 正常启动） */
+  try {
+    isAutostart = await invoke<boolean>('get_startup_mode');
+  } catch {
+    isAutostart = false;
+  }
+
+  /* 11. 环境探测（不阻塞主界面） */
   try {
     const env = await invoke<EnvStatus>('detect_env');
     renderEnv(env);
@@ -675,7 +684,7 @@ async function init() {
     /* 环境探测失败不阻塞主界面 */
   }
 
-  /* 11. 初始渲染 */
+  /* 12. 初始渲染 */
   try {
     renderList();
     refreshActions();
@@ -683,9 +692,57 @@ async function init() {
     console.error('[init] 初始渲染失败', e);
   }
 
-  /* 12. 启动时自动检查更新（用户可在设置中开启） */
-  if (appSettings.autoCheck) {
+  /* 13. 自动检查更新
+   * - 开机自启动模式：无论 autoCheck 设置如何，都静默检查更新
+   *   有更新 → 显示主窗口；无更新 → 保持后台静默运行
+   * - 正常启动模式：仅当用户开启 autoCheck 时自动检查
+   */
+  if (isAutostart) {
+    // 开机自启动：延迟自定义秒数后静默检查，默认 10 秒
+    // 用于等待网络（如校园网认证）就绪后再检查更新
+    const delayMs = Math.max(0, (appSettings.autostartDelay ?? 10)) * 1000;
+    setTimeout(() => void autostartCheck(), delayMs);
+  } else if (appSettings.autoCheck) {
     setTimeout(() => void doCheck(), 500);
+  }
+}
+
+/**
+ * 开机自启动模式下的静默检查：
+ * 有更新 → 显示主窗口并发送通知；无更新 → 保持后台静默运行
+ */
+async function autostartCheck() {
+  try {
+    const result = await invoke<UpdateItem[]>('check_updates');
+    const unfiltered = result || [];
+    // 过滤掉被忽略的项
+    items = unfiltered.filter((i) => !isItemIgnored(i.id, i.latest, appSettings));
+    scanned = true;
+    renderList();
+    refreshActions();
+
+    if (items.length > 0) {
+      // 有更新：显示主窗口 + 发送通知
+      if (appWindow) {
+        await appWindow.show();
+        await appWindow.setFocus();
+      }
+      void invoke('send_notification', {
+        title: '发现可更新项',
+        body: `共 ${items.length} 项可更新，点击查看详情`,
+        level: 'info',
+      }).catch(() => undefined);
+    } else {
+      // 无更新：保持后台静默运行，不显示窗口
+      // 可选：发送一条"无更新"通知，但为了不打扰用户，这里静默处理
+      console.log('[autostart] 无更新，保持后台静默运行');
+    }
+  } catch (e) {
+    console.warn('[autostart] 静默检查失败', e);
+    // 检查失败时也显示窗口，让用户知道出了问题
+    if (appWindow) {
+      await appWindow.show();
+    }
   }
 }
 

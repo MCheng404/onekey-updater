@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::util::now_time;
+
 /// 更新来源
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -86,11 +88,10 @@ pub struct LogLine {
 
 impl LogLine {
     pub fn new(level: &str, text: impl Into<String>) -> Self {
-        let at = chrono_lite_now();
         Self {
             level: level.to_string(),
             text: text.into(),
-            at,
+            at: now_time(),
         }
     }
 }
@@ -113,18 +114,4 @@ pub struct ItemResult {
     pub id: String,
     pub name: String,
     pub ok: bool,
-}
-
-/// 本地时间 HH:MM:SS（避免引入 chrono 依赖）
-fn chrono_lite_now() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let secs_of_day = (secs + 8 * 3600) % 86400; // UTC+8
-    let h = secs_of_day / 3600;
-    let m = (secs_of_day % 3600) / 60;
-    let s = secs_of_day % 60;
-    format!("{:02}:{:02}:{:02}", h, m, s)
 }

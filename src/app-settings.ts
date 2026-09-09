@@ -13,12 +13,15 @@ export interface AppSettings {
   ignoreVersions: Record<string, string>;
   /** 永久忽略黑名单：itemId 列表。 */
   blacklist: string[];
+  /** 开机自启动检查延迟（秒）。自启动模式下等待网络就绪后再检查更新。 */
+  autostartDelay: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   autoCheck: false,
   ignoreVersions: {},
   blacklist: [],
+  autostartDelay: 10,
 };
 
 export function loadSettings(): AppSettings {
@@ -30,6 +33,7 @@ export function loadSettings(): AppSettings {
       autoCheck: parsed.autoCheck ?? false,
       ignoreVersions: parsed.ignoreVersions ?? {},
       blacklist: parsed.blacklist ?? [],
+      autostartDelay: parsed.autostartDelay ?? 10,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

@@ -1,13 +1,18 @@
 use std::cmp::Ordering;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{mpsc, RwLock};
+use std::time::Duration;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// is_admin 结果缓存：应用运行期间管理员状态不会变化，
+/// 避免每次 OpenClaw 更新都启动 `net session` 子进程。
+static ADMIN_CACHE: RwLock<Option<bool>> = RwLock::new(None);
 
 /// 子进程输出解码：优先 UTF-8，失败回退 GBK（Windows 中文环境常见）
 pub fn decode(bytes: &[u8]) -> String {
@@ -71,7 +76,7 @@ pub fn run_capture_with_timeout(
         let _ = tx.send(result);
     });
 
-    rx.recv_timeout(std::time::Duration::from_secs(timeout_secs))
+    rx.recv_timeout(Duration::from_secs(timeout_secs))
         .map_err(|_| format!("{} 执行超时（{}秒）", program, timeout_secs))?
 }
 
@@ -81,6 +86,9 @@ pub fn run_stream<F: FnMut(&str)>(program: &str, args: &[&str], on_line: F) -> R
 }
 
 /// 带超时的流式执行，逐行回调；返回进程退出码。
+///
+/// 优化：用 250ms 轮询替代 100ms，减少 CPU 唤醒次数；
+/// 有输出时立即处理（recv_timeout 返回 Ok），无输出时才轮询检查子进程。
 pub fn run_stream_with_timeout<F: FnMut(&str)>(
     program: &str,
     args: &[&str],
@@ -98,6 +106,7 @@ pub fn run_stream_with_timeout<F: FnMut(&str)>(
 
     let (tx, rx) = mpsc::channel::<Vec<u8>>();
 
+    // stdout 读取线程
     if let Some(out) = stdout {
         let tx = tx.clone();
         std::thread::spawn(move || {
@@ -117,6 +126,7 @@ pub fn run_stream_with_timeout<F: FnMut(&str)>(
         });
     }
 
+    // stderr 读取线程
     if let Some(err) = stderr {
         let tx = tx.clone();
         std::thread::spawn(move || {
@@ -138,18 +148,19 @@ pub fn run_stream_with_timeout<F: FnMut(&str)>(
 
     drop(tx);
 
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+    let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
+    let poll_interval = Duration::from_millis(250);
 
     // 接收输出 + 等待子进程，带总超时
     loop {
-        match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+        match rx.recv_timeout(poll_interval) {
             Ok(raw) => {
                 let line = decode(&raw);
                 let line = line.trim_end_matches(['\r', '\n']);
                 on_line(line);
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                // 100ms 内无新输出，检查子进程是否已退出
+                // 250ms 内无新输出，检查子进程是否已退出
                 match child.try_wait() {
                     Ok(Some(status)) => {
                         // 子进程已退出，排空通道中剩余的输出
@@ -188,8 +199,27 @@ pub fn cmd_exists(program: &str) -> bool {
     which::which(program).is_ok()
 }
 
-/// 是否管理员权限（5 秒超时，超时视为非管理员）
+/// 是否管理员权限（带缓存，5 秒超时，超时视为非管理员）
+///
+/// 优化：结果缓存到 ADMIN_CACHE，应用运行期间只检测一次，
+/// 避免每次 OpenClaw 更新都启动 `net session` 子进程。
 pub fn is_admin() -> bool {
+    // 快速路径：读缓存
+    if let Ok(guard) = ADMIN_CACHE.read() {
+        if let Some(cached) = *guard {
+            return cached;
+        }
+    }
+
+    // 慢速路径：检测并缓存
+    let result = detect_admin();
+    if let Ok(mut guard) = ADMIN_CACHE.write() {
+        *guard = Some(result);
+    }
+    result
+}
+
+fn detect_admin() -> bool {
     let (tx, rx) = mpsc::channel::<bool>();
     std::thread::spawn(move || {
         let mut cmd = Command::new("net");
@@ -199,8 +229,25 @@ pub fn is_admin() -> bool {
         let result = cmd.status().map(|s| s.success()).unwrap_or(false);
         let _ = tx.send(result);
     });
-    rx.recv_timeout(std::time::Duration::from_secs(5))
+    rx.recv_timeout(Duration::from_secs(5))
         .unwrap_or(false)
+}
+
+/// 本地时间 HH:MM:SS（避免引入 chrono 依赖）
+///
+/// 统一从 util 导出，model.rs 和 notify.rs 共用，避免重复实现。
+pub fn now_time() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // UTC+8（中国标准时间）
+    let secs_of_day = (secs + 8 * 3600) % 86400;
+    let h = secs_of_day / 3600;
+    let m = (secs_of_day % 3600) / 60;
+    let s = secs_of_day % 60;
+    format!("{:02}:{:02}:{:02}", h, m, s)
 }
 
 /// 宽松版本号比较：1 = a>b, -1 = a<b, 0 = 相等
@@ -252,8 +299,32 @@ fn cmp_ver(a: &str, b: &str) -> Ordering {
     Ordering::Equal
 }
 
+/// 从可能带前导警告的输出里抠出 JSON 对象（第一个 { 到最后一个 }）
+pub fn extract_json_object(s: &str) -> Option<&str> {
+    let start = s.find('{')?;
+    let end = s.rfind('}')?;
+    if end > start {
+        Some(&s[start..=end])
+    } else {
+        None
+    }
+}
+
+/// 从可能带前导警告的输出里抠出 JSON 数组（第一个 [ 到最后一个 ]）
+pub fn extract_json_array(s: &str) -> Option<&str> {
+    let start = s.find('[')?;
+    let end = s.rfind(']')?;
+    if end > start {
+        Some(&s[start..=end])
+    } else {
+        None
+    }
+}
+
 /// 受限并发的并行 map。把输入切成 `limit` 份交给工作线程，
 /// 用于批量跑外部命令（npm view / pip 查询等网络 IO 密集操作）。
+///
+/// 优化：工作线程 panic 时输出错误日志，避免静默丢失结果。
 pub fn par_map<T, R, F>(items: Vec<T>, limit: usize, f: F) -> Vec<R>
 where
     T: Send + Sync + 'static,
@@ -291,9 +362,10 @@ where
     }
 
     let mut result = Vec::with_capacity(n);
-    for h in handles {
-        if let Ok(mut part) = h.join() {
-            result.append(&mut part);
+    for (i, h) in handles.into_iter().enumerate() {
+        match h.join() {
+            Ok(mut part) => result.append(&mut part),
+            Err(_) => eprintln!("[par_map] 工作线程 {} panic，对应结果已丢失", i),
         }
     }
     result

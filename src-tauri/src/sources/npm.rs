@@ -1,6 +1,6 @@
 use crate::model::{Source, UpdateItem};
 use crate::sources::{LogFn, UpdateSource};
-use crate::util::{cmd_exists, compare_version, par_map, run_capture, run_capture_with_timeout, run_stream};
+use crate::util::{cmd_exists, compare_version, extract_json_object, par_map, run_capture_with_timeout, run_stream};
 
 pub struct NpmSource;
 
@@ -24,7 +24,7 @@ impl UpdateSource for NpmSource {
             }
         };
 
-        let json_part = match extract_object(&out) {
+        let json_part = match extract_json_object(&out) {
             Some(s) => s,
             None => {
                 log("ok", "npm 全局包全部是最新版本".into());
@@ -152,9 +152,11 @@ impl UpdateSource for NpmSource {
 }
 
 /// 查询某个 tag 对应的版本号，取不到返回 None
+///
+/// 优化：用 15 秒超时替代默认 30 秒，加快 npm 检查速度。
 fn npm_view_version(pkg: &str, tag: &str) -> Option<String> {
     let spec = format!("{}@{}", pkg, tag);
-    let out = run_capture("npm", &["view", &spec, "version"]).ok()?;
+    let out = run_capture_with_timeout("npm", &["view", &spec, "version"], 15).ok()?;
     let first = out.lines().next()?.trim().to_string();
 
     if first.is_empty() || first.starts_with("npm ERR") || first.contains("ERR!") {
@@ -171,17 +173,6 @@ fn npm_view_version(pkg: &str, tag: &str) -> Option<String> {
 
     if last.chars().next().map(|c| c.is_ascii_digit()) == Some(true) {
         Some(last)
-    } else {
-        None
-    }
-}
-
-/// 从可能带前导警告的输出里抠出 JSON 对象
-fn extract_object(s: &str) -> Option<&str> {
-    let start = s.find('{')?;
-    let end = s.rfind('}')?;
-    if end > start {
-        Some(&s[start..=end])
     } else {
         None
     }

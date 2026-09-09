@@ -1,6 +1,6 @@
 use crate::model::{Source, UpdateItem};
 use crate::sources::{LogFn, UpdateSource};
-use crate::util::{cmd_exists, compare_version, is_admin, run_capture, run_stream};
+use crate::util::{cmd_exists, compare_version, is_admin, run_capture_with_timeout, run_stream};
 
 pub struct OpenclawSource;
 
@@ -14,14 +14,10 @@ impl UpdateSource for OpenclawSource {
     }
 
     fn check(&self, log: LogFn) -> Vec<UpdateItem> {
-        if !self.available() {
-            log("warn", "跳过 OpenClaw（未安装 openclaw CLI）".into());
-            return vec![];
-        }
-
+        // 注意：check_one 已调用 source.available()，这里不需要重复检查
         log("info", "正在检查 OpenClaw 更新...".into());
 
-        let raw = run_capture("openclaw", &["--version"]).unwrap_or_default();
+        let raw = run_capture_with_timeout("openclaw", &["--version"], 15).unwrap_or_default();
         let current = extract_version(&raw);
         log("cmd", format!("当前版本：{}", current));
 
@@ -89,7 +85,7 @@ impl UpdateSource for OpenclawSource {
             log("warn", "非管理员模式，尝试用户目录安装...".into());
             let home = std::env::var("USERPROFILE").unwrap_or_default();
             let prefix = format!("{}\\.local", home);
-            let _ = run_capture("npm", &["config", "set", "prefix", &prefix]);
+            let _ = run_capture_with_timeout("npm", &["config", "set", "prefix", &prefix], 15);
             let old_path = std::env::var("PATH").unwrap_or_default();
             std::env::set_var("PATH", format!("{}\\bin;{}", prefix, old_path));
         }
@@ -122,8 +118,10 @@ impl UpdateSource for OpenclawSource {
 }
 
 /// 从 `npm view <spec> version` 输出中提取版本号
+///
+/// 优化：用 15 秒超时替代默认 30 秒，加快检查速度。
 fn query_npm_version(spec: &str) -> Option<String> {
-    let out = run_capture("npm", &["view", spec, "version"]).ok()?;
+    let out = run_capture_with_timeout("npm", &["view", spec, "version"], 15).ok()?;
     let version = out
         .lines()
         .map(|l| l.trim())

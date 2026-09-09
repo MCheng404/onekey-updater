@@ -1,6 +1,6 @@
 use crate::model::{Source, UpdateItem};
 use crate::sources::{LogFn, UpdateSource};
-use crate::util::{cmd_exists, run_capture_with_timeout, run_stream};
+use crate::util::{cmd_exists, extract_json_array, run_capture_with_timeout, run_stream};
 
 pub struct PipSource;
 
@@ -24,7 +24,7 @@ impl UpdateSource for PipSource {
             }
         };
 
-        let arr = match extract_array(&out) {
+        let arr = match extract_json_array(&out) {
             Some(s) => s,
             None => {
                 log("ok", "pip 包全部是最新版本".into());
@@ -105,15 +105,5 @@ impl UpdateSource for PipSource {
                 false
             }
         }
-    }
-}
-
-fn extract_array(s: &str) -> Option<&str> {
-    let start = s.find('[')?;
-    let end = s.rfind(']')?;
-    if end > start {
-        Some(&s[start..=end])
-    } else {
-        None
     }
 }

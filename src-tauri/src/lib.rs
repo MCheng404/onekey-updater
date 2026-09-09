@@ -12,7 +12,7 @@ use sources::{
     npm::NpmSource, openclaw::OpenclawSource, pip::PipSource, winget::WingetSource, LogFn,
     UpdateSource,
 };
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 /// 探测当前环境：哪些源可用、是否管理员
 ///
@@ -148,7 +148,6 @@ async fn start_update(app: AppHandle, items: Vec<UpdateItem>) -> Result<Vec<Item
 
 /// 打开设置子窗口。
 /// 窗口在配置中已预创建（visible: false），这里只负责显示。
-/// 改为 async command，避免窗口操作与事件循环互等造成死锁。
 #[tauri::command]
 async fn open_settings(app: AppHandle) {
     if let Some(window) = app.get_webview_window("settings") {
@@ -198,7 +197,7 @@ async fn rebuild_icon_cache() -> Result<Vec<IconEntry>, String> {
 /// level: info / ok / warn / err
 ///
 /// 注意：native 模式下会启动 PowerShell 并空转 3 秒等待气泡消失，
-/// 这里采用 fire-and-forget：spawn 后立即返回，不阻塞调用方。
+/// 这里采用 fire-and-forget：spawn_blocking 后立即返回，不阻塞调用方。
 #[tauri::command]
 async fn send_notification(
     app: AppHandle,
@@ -207,11 +206,9 @@ async fn send_notification(
     level: Option<String>,
 ) -> Result<(), String> {
     let level = level.unwrap_or_else(|| "info".to_string());
-    tauri::async_runtime::spawn(async move {
-        let _ = tauri::async_runtime::spawn_blocking(move || {
-            notify::show_toast(&app, &title, &body, &level)
-        })
-        .await;
+    // fire-and-forget：spawn_blocking 后立即返回
+    tauri::async_runtime::spawn_blocking(move || {
+        let _ = notify::show_toast(&app, &title, &body, &level);
     });
     Ok(())
 }
@@ -248,14 +245,18 @@ async fn get_autostart() -> Result<bool, String> {
 }
 
 /// 设置开机自启动（启用/禁用）
+///
+/// 优化：注册表值添加 `--autostart` 参数，应用启动时可识别开机自启动模式，
+/// 实现"有更新才显示窗口，无更新后台静默运行"。
 #[tauri::command]
 async fn set_autostart(enable: bool) -> Result<(), String> {
     if enable {
         let exe = std::env::current_exe().map_err(|e| format!("获取可执行文件路径失败: {}", e))?;
         let exe_path = exe.to_string_lossy().to_string();
         // 用引号包裹路径，避免路径含空格时解析错误；
+        // 追加 --autostart 参数，标识开机自启动模式
         // main.rs 已设置 windows_subsystem="windows"，不会弹出控制台窗口
-        let quoted = format!("\"{}\"", exe_path);
+        let quoted = format!("\"{}\" --autostart", exe_path);
         let status = std::process::Command::new("reg")
             .args([
                 "add",
@@ -285,42 +286,49 @@ async fn set_autostart(enable: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// 查询当前启动模式：是否为开机自启动（--autostart 参数）
+///
+/// 前端根据此值决定：自启动模式下静默检查更新，有更新才显示窗口。
+#[tauri::command]
+async fn get_startup_mode() -> bool {
+    std::env::args().any(|arg| arg == "--autostart" || arg == "-a")
+}
+
+/// 窗口关闭时改为隐藏而非销毁（settings/notify/about 共用）
+///
+/// 优化：提取为辅助函数，避免三个窗口重复相同的 on_window_event 代码。
+fn hide_on_close(window: &WebviewWindow) {
+    let handle = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = handle.hide();
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+pub fn run(autostart: bool) {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .setup(|app| {
-            // 设置窗口关闭时改为隐藏而非销毁，下次打开直接 show
+        .setup(move |app| {
+            // 设置/通知/关于窗口关闭时改为隐藏而非销毁，下次打开直接 show
             if let Some(window) = app.get_webview_window("settings") {
-                let handle = window.clone();
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = handle.hide();
-                    }
-                });
+                hide_on_close(&window);
             }
-
-            // 通知窗口默认隐藏；每次 show_toast 时按偏好位置弹出
             if let Some(window) = app.get_webview_window("notify") {
-                let handle = window.clone();
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = handle.hide();
-                    }
-                });
+                hide_on_close(&window);
+            }
+            if let Some(window) = app.get_webview_window("about") {
+                hide_on_close(&window);
             }
 
-            // 关于窗口关闭时隐藏而非销毁
-            if let Some(window) = app.get_webview_window("about") {
-                let handle = window.clone();
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = handle.hide();
-                    }
-                });
+            // 开机自启动模式：主窗口默认隐藏，后台静默检查更新
+            // 有更新时前端会调用 show() 显示窗口，无更新则保持后台运行
+            if autostart {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
             }
 
             // 主窗口真正关闭时，退出整个应用，避免 settings/notify
@@ -349,7 +357,8 @@ pub fn run() {
             save_notify_prefs,
             load_notify_prefs,
             get_autostart,
-            set_autostart
+            set_autostart,
+            get_startup_mode
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");

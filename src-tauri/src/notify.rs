@@ -1,4 +1,5 @@
 use crate::model::NotifyPrefs;
+use crate::util::now_time;
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
@@ -118,7 +119,7 @@ pub fn show_toast(app: &AppHandle, title: &str, body: &str, level: &str) -> Resu
         "body": body,
         "level": level,
         "durationMs": prefs.duration_ms,
-        "ts": chrono_lite_now(),
+        "ts": now_time(),
     });
     let _ = app.emit("notify-toast", payload);
 
@@ -173,17 +174,4 @@ pub fn position_window(window: &tauri::WebviewWindow, position: &str) -> Result<
 pub fn stack_offset(position: &str, index: u32) -> i32 {
     let dir = if position.starts_with("top") { 1 } else { -1 };
     dir * (index as i32) * (NOTIFY_H as i32 + NOTIFY_GAP)
-}
-
-fn chrono_lite_now() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let secs_of_day = (secs + 8 * 3600) % 86400;
-    let h = secs_of_day / 3600;
-    let m = (secs_of_day % 3600) / 60;
-    let s = secs_of_day % 60;
-    format!("{:02}:{:02}:{:02}", h, m, s)
 }

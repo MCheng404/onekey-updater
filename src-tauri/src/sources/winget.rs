@@ -1,6 +1,6 @@
 use crate::model::{Source, UpdateItem};
 use crate::sources::{LogFn, UpdateSource};
-use crate::util::{cmd_exists, run_capture, run_stream};
+use crate::util::{cmd_exists, extract_json_array, run_capture, run_stream};
 
 pub struct WingetSource;
 
@@ -79,12 +79,8 @@ impl UpdateSource for WingetSource {
 
 /* ============ JSON 路径（未来版本可用） ============ */
 fn try_json(out: &str) -> Option<Vec<UpdateItem>> {
-    let start = out.find('[')?;
-    let end = out.rfind(']')?;
-    if end <= start {
-        return None;
-    }
-    let value: serde_json::Value = serde_json::from_str(&out[start..=end]).ok()?;
+    let arr = extract_json_array(out)?;
+    let value: serde_json::Value = serde_json::from_str(arr).ok()?;
     let list = value.as_array()?;
 
     let mut items = Vec::new();
