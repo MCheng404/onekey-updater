@@ -294,6 +294,24 @@ async fn get_startup_mode() -> bool {
     std::env::args().any(|arg| arg == "--autostart" || arg == "-a")
 }
 
+/// 获取系统信息：CPU 架构 + 操作系统平台
+///
+/// 用于关于窗口显示当前运行架构（x64 / ARM64）和平台（Windows）。
+#[tauri::command]
+async fn get_system_info() -> SystemInfo {
+    SystemInfo {
+        arch: std::env::consts::ARCH.to_string(),
+        platform: std::env::consts::OS.to_string(),
+    }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SystemInfo {
+    arch: String,
+    platform: String,
+}
+
 /// 窗口关闭时改为隐藏而非销毁（settings/notify/about 共用）
 ///
 /// 优化：提取为辅助函数，避免三个窗口重复相同的 on_window_event 代码。
@@ -358,7 +376,8 @@ pub fn run(autostart: bool) {
             load_notify_prefs,
             get_autostart,
             set_autostart,
-            get_startup_mode
+            get_startup_mode,
+            get_system_info
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");

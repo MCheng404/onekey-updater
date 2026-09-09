@@ -6,6 +6,7 @@
 import './styles.css';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getVersion } from '@tauri-apps/api/app';
+import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
 import { applyTheme, loadTheme } from './theme';
 import { t, getLang, watchLang } from './i18n';
@@ -111,12 +112,24 @@ async function init(): Promise<void> {
     console.warn('[about] i18n 初始化失败', e);
   }
 
-  // 4. 版本号
+  // 4. 版本号 + 架构 + 平台
   try {
     const version = await getVersion();
     el('appVersion').textContent = version;
   } catch {
-    el('appVersion').textContent = '0.1.0';
+    el('appVersion').textContent = '0.2.0';
+  }
+
+  try {
+    const info = await invoke<{ arch: string; platform: string }>('get_system_info');
+    // 架构名称美化：x86_64 → x64，aarch64 → ARM64
+    const archLabel = info.arch === 'x86_64' ? 'x64' : info.arch === 'aarch64' ? 'ARM64' : info.arch;
+    el('appArch').textContent = archLabel;
+    // 平台名称美化
+    const platformLabel = info.platform === 'windows' ? 'Windows' : info.platform;
+    el('appPlatform').textContent = platformLabel;
+  } catch (e) {
+    console.warn('[about] 获取架构信息失败', e);
   }
 
   // 5. 关闭按钮

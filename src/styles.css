@@ -1643,6 +1643,29 @@ input[type='range'] {
   color: var(--accent);
   font-weight: 600;
 }
+.about-arch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-top: 8px;
+}
+.about-arch-badge svg {
+  color: var(--accent);
+  opacity: 0.8;
+}
+.about-arch-badge .mono {
+  color: var(--text);
+  font-weight: 600;
+}
+.arch-sep {
+  color: var(--text-faint);
+}
 
 /* 描述 */
 .about-description {
