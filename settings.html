@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>设置</title>
+  </head>
+  <body>
+    <div class="glass-root">
+      <header class="titlebar" id="titlebar">
+        <div class="tb-left">
+          <span class="tb-dot"></span>
+          <span class="tb-title">设置</span>
+        </div>
+        <div class="tb-right">
+          <button class="tb-btn tb-close" id="btnClose" title="关闭">
+            <svg viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" /></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="settings-scroll">
+
+        <section class="settings-section">
+          <h2>外观预设</h2>
+          <div class="preset-grid" id="presetGrid"></div>
+        </section>
+
+        <section class="settings-section">
+          <h2>自定义配色</h2>
+          <div class="field-row">
+            <label for="colorAccent">强调色</label>
+            <input type="color" id="colorAccent" />
+            <span class="field-value mono" id="valAccent"></span>
+            <button class="mini-btn" data-reset="accent">重置</button>
+          </div>
+          <div class="field-row">
+            <label for="colorText">主文字</label>
+            <input type="color" id="colorText" />
+            <span class="field-value mono" id="valText"></span>
+            <button class="mini-btn" data-reset="text">重置</button>
+          </div>
+          <div class="field-row">
+            <label for="colorDim">次要文字</label>
+            <input type="color" id="colorDim" />
+            <span class="field-value mono" id="valDim"></span>
+            <button class="mini-btn" data-reset="dim">重置</button>
+          </div>
+          <p class="field-hint">次要文字用于名称、说明与时间戳，建议保留一定透明度。</p>
+        </section>
+
+        <section class="settings-section">
+          <h2>界面</h2>
+          <div class="field-row">
+            <label>主题模式</label>
+            <div class="mode-selector">
+              <button class="mode-btn" data-mode="light" type="button">浅色</button>
+              <button class="mode-btn" data-mode="dark" type="button">深色</button>
+              <button class="mode-btn" data-mode="system" type="button">跟随系统</button>
+            </div>
+          </div>
+          <div class="field-row">
+            <label for="selectLang">语言</label>
+            <select id="selectLang" class="select-input">
+              <option value="zh-CN">简体中文</option>
+              <option value="en-US">English</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="rangeOpacity">背景浓度</label>
+            <input type="range" id="rangeOpacity" min="15" max="80" step="1" />
+            <span class="field-value mono" id="valOpacity"></span>
+          </div>
+          <div class="field-row">
+            <label for="rangeRadius">圆角</label>
+            <input type="range" id="rangeRadius" min="6" max="28" step="1" />
+            <span class="field-value mono" id="valRadius"></span>
+          </div>
+          <div class="field-row">
+            <label for="toggleMotion">减弱动画</label>
+            <label class="switch">
+              <input type="checkbox" id="toggleMotion" />
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+          </div>
+          <div class="field-row">
+            <label for="toggleAutoCheck">启动时自动检查更新</label>
+            <label class="switch">
+              <input type="checkbox" id="toggleAutoCheck" />
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+          </div>
+          <div class="field-row">
+            <label for="toggleAutostart">开机自启动</label>
+            <label class="switch">
+              <input type="checkbox" id="toggleAutostart" />
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+          </div>
+          <p class="field-hint">开启后应用启动时自动扫描可更新项，无需手动点击。</p>
+        </section>
+
+        <section class="settings-section">
+          <h2>通知</h2>
+          <div class="not-mode-row">
+            <label class="not-mode-card">
+              <input type="radio" name="notifMode" value="native" />
+              <span class="not-mode-card-body">
+                <strong>Windows 系统通知</strong>
+                <small>走 Windows 操作中心，不打扰、不依赖本应用窗口</small>
+              </span>
+            </label>
+            <label class="not-mode-card">
+              <input type="radio" name="notifMode" value="app" />
+              <span class="not-mode-card-body">
+                <strong>应用内通知</strong>
+                <small>在屏幕一角显示独立毛玻璃窗口，可自选位置</small>
+              </span>
+            </label>
+          </div>
+
+          <div class="not-app-only">
+            <div class="field-row field-row-stack">
+              <label>通知位置</label>
+              <div class="pos-mini" id="posMini" data-pos="bottom-right">
+                <div class="pos-mini-frame"></div>
+                <div class="pos-dot"></div>
+              </div>
+              <p class="field-hint pos-hint" id="posHint">右下：人眼最常见的视线落点，新通知从底部滑入，与系统通知中心一致。</p>
+            </div>
+
+            <div class="field-row">
+              <label for="rangeNotifDuration">显示时长</label>
+              <input type="range" id="rangeNotifDuration" min="1500" max="12000" step="500" />
+              <span class="field-value mono" id="valNotifDuration"></span>
+            </div>
+
+            <div class="field-row">
+              <label for="rangeNotifOpacity">不透明度</label>
+              <input type="range" id="rangeNotifOpacity" min="40" max="100" step="1" />
+              <span class="field-value mono" id="valNotifOpacity"></span>
+            </div>
+
+            <div class="settings-actions">
+              <button class="mini-btn" id="btnTestNotif">测试通知</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>应用图标</h2>
+          <p class="field-hint">从注册表 Uninstall 表读取已安装程序的 DisplayIcon，缓存 24 小时。</p>
+          <div class="settings-actions">
+            <button class="mini-btn" id="btnRefreshIcons">刷新图标缓存</button>
+            <span class="field-value mono" id="iconStat"></span>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>忽略列表</h2>
+          <p class="field-hint">管理被忽略的更新项。「忽略此版本」在版本号变化后自动恢复；「永久忽略」需手动移除。</p>
+          <div class="ignore-list" id="ignoreList">
+            <div class="ignore-empty">暂无被忽略的更新项</div>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>关于</h2>
+          <div class="about-row">
+            <div class="about-info">
+              <div class="about-name">一键更新</div>
+              <div class="about-version">版本 0.1.0</div>
+              <div class="about-desc">统一管理 npm / winget / pip / OpenClaw 四源软件更新</div>
+            </div>
+            <button class="btn btn-primary" id="btnOpenAbout">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v.01M8 8v3"/></svg>
+              关于软件
+            </button>
+          </div>
+        </section>
+
+        <div class="settings-actions">
+          <button class="btn" id="btnResetAll">恢复默认外观</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/settings.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>系统一键更新</title>
+  </head>
+  <body>
+    <div class="glass-root">
+      <header class="titlebar" id="titlebar">
+        <div class="tb-left">
+          <span class="tb-dot"></span>
+          <span class="tb-title">系统一键更新</span>
+          <span class="tb-badge" id="adminBadge" hidden>管理员</span>
+        </div>
+        <div class="tb-right">
+          <button class="tb-btn" id="btnSettings" title="设置">
+            <svg viewBox="0 0 12 12">
+              <circle cx="6" cy="6" r="1.9" />
+              <path
+                d="M6 .8v1.4M6 9.8v1.4M1.2 6H2.6M9.4 6h1.4M2.6 2.6l1 1M8.4 8.4l1 1M9.4 2.6l-1 1M3.6 8.4l-1 1"
+              />
+            </svg>
+          </button>
+          <button class="tb-btn" id="btnMin" title="最小化">
+            <svg viewBox="0 0 10 10"><path d="M1 5h8" /></svg>
+          </button>
+          <button class="tb-btn" id="btnMax" title="最大化">
+            <svg viewBox="0 0 10 10"><rect x="1.2" y="1.2" width="7.6" height="7.6" /></svg>
+          </button>
+          <button class="tb-btn tb-close" id="btnClose" title="关闭">
+            <svg viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" /></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- ============ 主视图 ============ -->
+      <main class="view" id="viewMain">
+        <div class="toolbar">
+          <div class="env-chips" id="envChips"></div>
+          <div class="toolbar-actions">
+            <button class="btn" id="btnCheck">
+              <span class="btn-spinner" id="checkSpinner" hidden></span>
+              <span id="btnCheckLabel">检查更新</span>
+            </button>
+            <button class="btn btn-primary" id="btnUpdateSelected" disabled>
+              更新选中 · 0
+            </button>
+            <button class="btn btn-primary" id="btnUpdateAll" disabled>一键全部更新</button>
+          </div>
+        </div>
+
+        <div class="progress-wrap" id="progressWrap" hidden>
+          <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+          <span class="progress-text" id="progressText"></span>
+        </div>
+
+        <div class="content">
+          <section class="list-pane">
+            <div class="list-scroll" id="listScroll"></div>
+            <div class="pane-empty" id="listEmpty">点击「检查更新」开始扫描</div>
+          </section>
+          <aside class="log-pane">
+            <div class="pane-head">
+              <span>运行日志</span>
+              <button class="mini-btn" id="btnClearLog">清空</button>
+            </div>
+            <div class="log-body" id="logBody"></div>
+          </aside>
+        </div>
+
+        <footer class="statusbar">
+          <span id="statusLeft">就绪</span>
+          <span id="statusRight" class="stat-right"></span>
+        </footer>
+      </main>
+
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
