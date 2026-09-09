@@ -1,4 +1,4 @@
-use crate::model::{IconEntry, UpdateItem};
+use crate::model::{IconEntry, Source, UpdateItem};
 use crate::util::run_capture;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -82,6 +82,31 @@ fn now_secs() -> u64 {
 fn cache_path() -> Option<PathBuf> {
     let local = std::env::var("LOCALAPPDATA").ok()?;
     Some(PathBuf::from(local).join("onekey-updater").join("icon-cache.json"))
+}
+
+/// 默认品牌图标（SVG data URL），用于无法从注册表匹配到图标的情况
+mod default_icons {
+    /// npm 品牌图标：红色圆角方块 + 白色 npm 文字
+    pub const NPM: &str = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='8' fill='%23CB3837'/%3E%3Ctext x='24' y='30' font-family='Arial,sans-serif' font-size='14' font-weight='bold' fill='white' text-anchor='middle'%3Enpm%3C/text%3E%3C/svg%3E";
+
+    /// pip 品牌图标：蓝色圆角方块 + 白色 pip 文字
+    pub const PIP: &str = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='8' fill='%233776AB'/%3E%3Ctext x='24' y='30' font-family='Arial,sans-serif' font-size='14' font-weight='bold' fill='white' text-anchor='middle'%3Epip%3C/text%3E%3C/svg%3E";
+
+    /// OpenClaw 品牌图标：紫色渐变圆角方块 + 白色 OC 文字
+    pub const OPENCLAW: &str = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238B5CF6'/%3E%3Cstop offset='1' stop-color='%236366F1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='48' height='48' rx='8' fill='url(%23g)'/%3E%3Ctext x='24' y='30' font-family='Arial,sans-serif' font-size='13' font-weight='bold' fill='white' text-anchor='middle'%3EOC%3C/text%3E%3C/svg%3E";
+
+    /// winget 品牌图标：蓝色圆角方块 + 白色 winget 文字
+    pub const WINGET: &str = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='8' fill='%230078D4'/%3E%3Ctext x='24' y='30' font-family='Arial,sans-serif' font-size='11' font-weight='bold' fill='white' text-anchor='middle'%3Ewinget%3C/text%3E%3C/svg%3E";
+}
+
+/// 根据源类型获取默认品牌图标
+fn default_icon_for_source(source: Source) -> &'static str {
+    match source {
+        Source::Npm => default_icons::NPM,
+        Source::Pip => default_icons::PIP,
+        Source::Openclaw => default_icons::OPENCLAW,
+        Source::Winget => default_icons::WINGET,
+    }
 }
 
 /// 读取缓存；若文件超过 24 小时则视为过期。
@@ -189,57 +214,62 @@ fn name_matches(a: &str, b: &str) -> bool {
     stripped_a == stripped_b && stripped_a.len() >= 4
 }
 
-/// 给一组 items 填充 icon 字段。仅 winget 类型能匹配到系统已装程序图标。
+/// 给一组 items 填充 icon 字段。
+///
+/// 优化：对所有源类型进行图标匹配，无法匹配时使用默认品牌图标。
 #[allow(dead_code)]
 pub fn fill_icons(items: &mut [UpdateItem]) {
-    let needs: Vec<&UpdateItem> = items
-        .iter()
-        .filter(|i| matches!(i.source, crate::model::Source::Winget))
-        .collect();
-
-    if needs.is_empty() {
-        return;
-    }
-
     let cache = load_or_build_cache();
-    if cache.is_empty() {
-        return;
-    }
 
     for item in items.iter_mut() {
-        if !matches!(item.source, crate::model::Source::Winget) {
-            continue;
-        }
-        let mut best: Option<&String> = None;
-        for (name, icon) in &cache {
-            if name_matches(&item.name, name) {
-                best = Some(icon);
-                break;
+        let mut matched = false;
+        if !cache.is_empty() {
+            for (name, icon) in &cache {
+                if name_matches(&item.name, name) {
+                    item.icon = Some(format!("data:image/png;base64,{}", icon));
+                    matched = true;
+                    break;
+                }
             }
         }
-        if let Some(b64) = best {
-            item.icon = Some(format!("data:image/png;base64,{}", b64));
+        if !matched {
+            item.icon = Some(default_icon_for_source(item.source).to_string());
         }
     }
 }
 
 /// 异步命令版本，调用方传入 items，返回 id → data_url 映射。
 /// 同时返回耗时（毫秒），方便前端调试。
+///
+/// 优化：对所有源类型进行图标匹配（不只是 winget），
+/// 无法从注册表匹配到时使用源类型的默认品牌图标，确保列表中每个项都有图标。
 pub fn fetch_icons_blocking(items: &[UpdateItem]) -> (HashMap<String, String>, u128) {
     let started = SystemTime::now();
     let cache = load_or_build_cache();
     let mut out = HashMap::new();
+
     for item in items {
-        if !matches!(item.source, crate::model::Source::Winget) {
-            continue;
-        }
-        for (name, icon) in &cache {
-            if name_matches(&item.name, name) {
-                out.insert(item.id.clone(), format!("data:image/png;base64,{}", icon));
-                break;
+        // 优先从注册表缓存中匹配（所有源类型都尝试匹配）
+        let mut matched = false;
+        if !cache.is_empty() {
+            for (name, icon) in &cache {
+                if name_matches(&item.name, name) {
+                    out.insert(
+                        item.id.clone(),
+                        format!("data:image/png;base64,{}", icon),
+                    );
+                    matched = true;
+                    break;
+                }
             }
         }
+
+        // 无法匹配时使用源类型的默认品牌图标
+        if !matched {
+            out.insert(item.id.clone(), default_icon_for_source(item.source).to_string());
+        }
     }
+
     let elapsed = SystemTime::now()
         .duration_since(started)
         .map(|d| d.as_millis())
