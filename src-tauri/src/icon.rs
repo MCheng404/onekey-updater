@@ -69,6 +69,161 @@ foreach ($reg in $paths) {
 ConvertTo-Json -InputObject $out -Depth 3 -Compress
 "#;
 
+/// PowerShell 脚本 — 从 winget manifest 获取官方图标 URL。
+///
+/// 流程：
+///  1. winget export 导出已安装包列表（含版本号）
+///  2. 构造 GitHub raw manifest URL 并下载 YAML
+///  3. 解析 Icons[].IconUrl 字段
+///  4. 下载图标并转 base64 data URL
+///
+/// 输出：JSON 数组 [{id, icon}]，仅包含成功获取到图标的包。
+const PS_WINGET_MANIFEST: &str = r#"
+$ErrorActionPreference = 'SilentlyContinue'
+
+# 1. 导出已安装的 winget 包列表
+$tempFile = "$env:TEMP\winget-export-$(Get-Random).json"
+winget export -o $tempFile --include-versions --accept-source-agreements 2>$null
+
+if (-not (Test-Path -LiteralPath $tempFile)) { Write-Output '[]'; exit }
+$json = Get-Content -LiteralPath $tempFile -Raw | ConvertFrom-Json
+Remove-Item -LiteralPath $tempFile -Force
+
+if (-not $json.Sources -or $json.Sources.Count -eq 0) { Write-Output '[]'; exit }
+
+$out = New-Object System.Collections.Generic.List[object]
+$packages = $json.Sources[0].Packages
+
+foreach ($pkg in $packages) {
+    $id = $pkg.PackageIdentifier
+    $version = $pkg.Version
+    if (-not $id -or -not $version) { continue }
+
+    # 构造 manifest URL: manifests/<首字母>/<Publisher>/<Package>/<version>/<id>.yaml
+    $firstLetter = $id.Substring(0,1).ToLower()
+    $dotIdx = $id.IndexOf('.')
+    if ($dotIdx -lt 0) { continue }
+    $publisher = $id.Substring(0, $dotIdx)
+    $packageName = $id.Substring($dotIdx + 1)
+
+    $manifestUrl = "https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/$firstLetter/$publisher/$packageName/$version/$id.yaml"
+
+    try {
+        # 2. 下载 manifest YAML
+        $resp = Invoke-WebRequest -Uri $manifestUrl -UseBasicParsing -TimeoutSec 6
+        $content = $resp.Content
+
+        # 3. 解析 IconUrl（支持新格式 Icons[].IconUrl 和旧格式 IconUrl）
+        $iconUrl = $null
+        if ($content -match '(?m)^\s*-\s*IconUrl:\s*(.+?)\s*$') {
+            $iconUrl = $matches[1].Trim().Trim('"').Trim("'")
+        } elseif ($content -match '(?m)^\s*IconUrl:\s*(.+?)\s*$') {
+            $iconUrl = $matches[1].Trim().Trim('"').Trim("'")
+        }
+
+        if (-not $iconUrl) { continue }
+
+        # 4. 下载图标并转 base64
+        $iconResp = Invoke-WebRequest -Uri $iconUrl -UseBasicParsing -TimeoutSec 6
+        $bytes = $iconResp.Content
+        if ($bytes.Length -eq 0) { continue }
+
+        $b64 = [Convert]::ToBase64String($bytes)
+        $ext = [IO.Path]::GetExtension($iconUrl).ToLower().TrimStart('.')
+        $mime = switch ($ext) {
+            'png' { 'image/png' }
+            'jpg' { 'image/jpeg' }
+            'jpeg' { 'image/jpeg' }
+            'svg' { 'image/svg+xml' }
+            'ico' { 'image/x-icon' }
+            default { 'image/png' }
+        }
+
+        $out.Add([PSCustomObject]@{ id = $id; icon = "data:$mime;base64,$b64" })
+    } catch { continue }
+}
+
+ConvertTo-Json -InputObject $out -Depth 3 -Compress
+"#;
+
+/// PowerShell 脚本 — 扫描开始菜单快捷方式，解析 .lnk 的 TargetPath / IconLocation，
+/// 从可执行文件或图标文件提取 48×48 PNG，base64 输出 JSON 数组。
+///
+/// 覆盖：公共开始菜单 + 用户开始菜单，递归子目录。
+const PS_SHORTCUTS: &str = r#"
+$ErrorActionPreference = 'SilentlyContinue'
+Add-Type -AssemblyName System.Drawing
+
+$dirs = @(
+  "$env:ProgramData\Microsoft\Windows\Start Menu\Programs",
+  "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+)
+
+$shell = New-Object -ComObject WScript.Shell
+$seen = @{}
+$out = New-Object System.Collections.Generic.List[object]
+
+foreach ($dir in $dirs) {
+  if (-not (Test-Path -LiteralPath $dir)) { continue }
+  Get-ChildItem -LiteralPath $dir -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+      $link = $shell.CreateShortcut($_.FullName)
+      $name = [IO.Path]::GetFileNameWithoutExtension($_.Name)
+      if (-not $name) { return }
+
+      $nameKey = $name.ToLowerInvariant()
+      if ($seen.ContainsKey($nameKey)) { return }
+
+      # 优先用 IconLocation，其次用 TargetPath
+      $iconPath = $null
+      $iconIdx = 0
+      if ($link.IconLocation -and $link.IconLocation -ne ',0') {
+        $parts = $link.IconLocation -split ',', 2
+        $iconPath = $parts[0].Trim()
+        if ($parts.Count -gt 1) { [int]::TryParse($parts[1].Trim(), [ref]$iconIdx) | Out-Null }
+      }
+      if (-not $iconPath -or -not (Test-Path -LiteralPath $iconPath)) {
+        if ($link.TargetPath -and (Test-Path -LiteralPath $link.TargetPath)) {
+          $iconPath = $link.TargetPath
+        }
+      }
+      if (-not $iconPath -or -not (Test-Path -LiteralPath $iconPath)) { return }
+
+      $seen[$nameKey] = $true
+
+      # 提取图标
+      $bmp = New-Object System.Drawing.Bitmap 48, 48
+      $g = [System.Drawing.Graphics]::FromImage($bmp)
+      $g.SmoothingMode = 'AntiAlias'
+      $g.InterpolationMode = 'HighQualityBicubic'
+
+      $ext = [IO.Path]::GetExtension($iconPath).ToLower()
+      if ($ext -eq '.ico') {
+        $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
+        if ($icon) { $g.DrawIcon($icon, 0, 0); $icon.Dispose() }
+      } elseif ($ext -eq '.exe') {
+        $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
+        if ($icon) { $g.DrawIcon($icon, 0, 0); $icon.Dispose() }
+      } else {
+        $img = [System.Drawing.Image]::FromFile($iconPath)
+        $g.DrawImage($img, 0, 0, 48, 48)
+        $img.Dispose()
+      }
+
+      $g.Dispose()
+      $ms = New-Object System.IO.MemoryStream
+      $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+      $bytes = $ms.ToArray()
+      $ms.Dispose(); $bmp.Dispose()
+      $b64 = [Convert]::ToBase64String($bytes)
+      $out.Add([PSCustomObject]@{ name = $name; icon = $b64 })
+    } catch {}
+  }
+}
+
+ConvertTo-Json -InputObject $out -Depth 3 -Compress
+"#;
+
 /// 返回当前时间戳（秒）
 #[allow(dead_code)]
 fn now_secs() -> u64 {
@@ -198,6 +353,95 @@ fn load_or_build_cache() -> HashMap<String, String> {
     map
 }
 
+/// 从 winget manifest 获取官方图标（第一级，网络，最高质量）。
+/// 返回 (PackageId → data_url)。
+///
+/// 注意：此函数需要网络连接，且可能较慢。设置 15 秒整体超时。
+fn build_via_winget_manifest() -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let out = match crate::util::run_capture_with_timeout(
+        "powershell",
+        &["-NoProfile", "-NonInteractive", "-Command", PS_WINGET_MANIFEST],
+        15,
+    ) {
+        Ok(o) => o,
+        Err(_) => return map,
+    };
+
+    let trimmed = out.trim();
+    if trimmed.is_empty() || trimmed == "null" || trimmed == "[]" {
+        return map;
+    }
+
+    let value: serde_json::Value = match serde_json::from_str(trimmed) {
+        Ok(v) => v,
+        Err(_) => return map,
+    };
+
+    let arr = match value.as_array() {
+        Some(a) => a,
+        None => return map,
+    };
+
+    for entry in arr {
+        let id = entry
+            .get("id")
+            .or_else(|| entry.get("Id"))
+            .and_then(|v| v.as_str());
+        let icon = entry
+            .get("icon")
+            .or_else(|| entry.get("Icon"))
+            .and_then(|v| v.as_str());
+        if let (Some(i), Some(ic)) = (id, icon) {
+            map.insert(i.to_string(), ic.to_string());
+        }
+    }
+    map
+}
+
+/// 从开始菜单快捷方式获取图标（第三级，离线）。
+/// 返回 (快捷方式名称 → base64 PNG)。
+fn build_via_shortcuts() -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let out = match run_capture(
+        "powershell",
+        &["-NoProfile", "-NonInteractive", "-Command", PS_SHORTCUTS],
+    ) {
+        Ok(o) => o,
+        Err(_) => return map,
+    };
+
+    let trimmed = out.trim();
+    if trimmed.is_empty() || trimmed == "null" || trimmed == "[]" {
+        return map;
+    }
+
+    let value: serde_json::Value = match serde_json::from_str(trimmed) {
+        Ok(v) => v,
+        Err(_) => return map,
+    };
+
+    let arr = match value.as_array() {
+        Some(a) => a,
+        None => return map,
+    };
+
+    for entry in arr {
+        let name = entry
+            .get("name")
+            .or_else(|| entry.get("Name"))
+            .and_then(|v| v.as_str());
+        let icon = entry
+            .get("icon")
+            .or_else(|| entry.get("Icon"))
+            .and_then(|v| v.as_str());
+        if let (Some(n), Some(i)) = (name, icon) {
+            map.insert(n.to_string(), i.to_string());
+        }
+    }
+    map
+}
+
 /// 名称匹配：忽略大小写、子串包含、版本号尾巴差异
 fn name_matches(a: &str, b: &str) -> bool {
     let al = a.to_lowercase();
@@ -216,15 +460,44 @@ fn name_matches(a: &str, b: &str) -> bool {
 
 /// 给一组 items 填充 icon 字段。
 ///
-/// 优化：对所有源类型进行图标匹配，无法匹配时使用默认品牌图标。
+/// 多级降级策略：
+///  1. winget manifest 官方图标（仅 winget 类型）
+///  2. 注册表 DisplayIcon（离线）
+///  3. 开始菜单快捷方式（离线）
+///  4. 品牌默认图标（最终兜底）
 #[allow(dead_code)]
 pub fn fill_icons(items: &mut [UpdateItem]) {
-    let cache = load_or_build_cache();
+    // 第一级：winget manifest
+    let winget_manifest = if items.iter().any(|i| matches!(i.source, Source::Winget)) {
+        build_via_winget_manifest()
+    } else {
+        HashMap::new()
+    };
+
+    // 第二级：注册表
+    let registry = load_or_build_cache();
+
+    // 第三级：快捷方式
+    let shortcuts = if registry.is_empty() {
+        build_via_shortcuts()
+    } else {
+        HashMap::new()
+    };
 
     for item in items.iter_mut() {
         let mut matched = false;
-        if !cache.is_empty() {
-            for (name, icon) in &cache {
+
+        // 第一级：winget manifest
+        if matches!(item.source, Source::Winget) {
+            if let Some(icon) = winget_manifest.get(&item.id) {
+                item.icon = Some(icon.clone());
+                matched = true;
+            }
+        }
+
+        // 第二级：注册表
+        if !matched && !registry.is_empty() {
+            for (name, icon) in &registry {
                 if name_matches(&item.name, name) {
                     item.icon = Some(format!("data:image/png;base64,{}", icon));
                     matched = true;
@@ -232,6 +505,19 @@ pub fn fill_icons(items: &mut [UpdateItem]) {
                 }
             }
         }
+
+        // 第三级：快捷方式
+        if !matched && !shortcuts.is_empty() {
+            for (name, icon) in &shortcuts {
+                if name_matches(&item.name, name) {
+                    item.icon = Some(format!("data:image/png;base64,{}", icon));
+                    matched = true;
+                    break;
+                }
+            }
+        }
+
+        // 第四级：品牌默认图标
         if !matched {
             item.icon = Some(default_icon_for_source(item.source).to_string());
         }
@@ -241,18 +527,47 @@ pub fn fill_icons(items: &mut [UpdateItem]) {
 /// 异步命令版本，调用方传入 items，返回 id → data_url 映射。
 /// 同时返回耗时（毫秒），方便前端调试。
 ///
-/// 优化：对所有源类型进行图标匹配（不只是 winget），
-/// 无法从注册表匹配到时使用源类型的默认品牌图标，确保列表中每个项都有图标。
+/// 多级降级策略：
+///  1. winget manifest 官方图标（仅 winget 类型，网络，最高质量）
+///  2. 注册表 DisplayIcon（离线，所有源类型）
+///  3. 开始菜单快捷方式（离线，所有源类型）
+///  4. 品牌默认图标（最终兜底）
 pub fn fetch_icons_blocking(items: &[UpdateItem]) -> (HashMap<String, String>, u128) {
     let started = SystemTime::now();
-    let cache = load_or_build_cache();
+
+    // 第一级：winget manifest 官方图标（仅 winget 类型）
+    let winget_manifest = if items.iter().any(|i| matches!(i.source, Source::Winget)) {
+        build_via_winget_manifest()
+    } else {
+        HashMap::new()
+    };
+
+    // 第二级：注册表 DisplayIcon（离线缓存）
+    let registry = load_or_build_cache();
+
+    // 第三级：开始菜单快捷方式（仅在注册表没匹配到时才构建，节省时间）
+    let shortcuts = if registry.is_empty() {
+        build_via_shortcuts()
+    } else {
+        HashMap::new()
+    };
+
     let mut out = HashMap::new();
 
     for item in items {
-        // 优先从注册表缓存中匹配（所有源类型都尝试匹配）
         let mut matched = false;
-        if !cache.is_empty() {
-            for (name, icon) in &cache {
+
+        // 第一级：winget manifest（通过包 ID 精确匹配）
+        if matches!(item.source, Source::Winget) {
+            if let Some(icon) = winget_manifest.get(&item.id) {
+                out.insert(item.id.clone(), icon.clone());
+                matched = true;
+            }
+        }
+
+        // 第二级：注册表 DisplayIcon（通过名称模糊匹配）
+        if !matched && !registry.is_empty() {
+            for (name, icon) in &registry {
                 if name_matches(&item.name, name) {
                     out.insert(
                         item.id.clone(),
@@ -264,9 +579,26 @@ pub fn fetch_icons_blocking(items: &[UpdateItem]) -> (HashMap<String, String>, u
             }
         }
 
-        // 无法匹配时使用源类型的默认品牌图标
+        // 第三级：开始菜单快捷方式（通过名称模糊匹配）
+        if !matched && !shortcuts.is_empty() {
+            for (name, icon) in &shortcuts {
+                if name_matches(&item.name, name) {
+                    out.insert(
+                        item.id.clone(),
+                        format!("data:image/png;base64,{}", icon),
+                    );
+                    matched = true;
+                    break;
+                }
+            }
+        }
+
+        // 第四级：品牌默认图标（最终兜底）
         if !matched {
-            out.insert(item.id.clone(), default_icon_for_source(item.source).to_string());
+            out.insert(
+                item.id.clone(),
+                default_icon_for_source(item.source).to_string(),
+            );
         }
     }
 
