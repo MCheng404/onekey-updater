@@ -10,10 +10,10 @@ import { open } from '@tauri-apps/plugin-shell';
 import { applyTheme, loadTheme } from './theme';
 import { t, getLang, watchLang } from './i18n';
 
-// GitHub 配置（创建仓库后更新）
-const GITHUB_PROFILE = 'https://github.com';
-const GITHUB_REPO = 'https://github.com';
-const REPO_API = ''; // e.g. https://api.github.com/repos/user/repo/releases/latest
+// GitHub 配置
+const GITHUB_PROFILE = 'https://github.com/MCheng404';
+const GITHUB_REPO = 'https://github.com/MCheng404/onekey-updater';
+const REPO_API = 'https://api.github.com/repos/MCheng404/onekey-updater/releases/latest';
 
 let win: ReturnType<typeof getCurrentWindow> | null = null;
 
