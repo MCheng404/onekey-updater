@@ -1,0 +1,160 @@
+name: Release
+
+# 推一个 vX.Y.Z 的 tag 即触发：云端自动构建 x64 + ARM64 的「安装包 + 便携包」，
+# （可选）Authenticode 签名，生成 SHA256SUMS.txt 与自动更新日志，并发布 GitHub Release。
+# 也可在 Actions 页面手动 `workflow_dispatch` 触发。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true   # 打错 tag 重推时取消上一次构建，省 runner 分钟
+
+permissions:
+  contents: write            # softprops/action-gh-release 建 Release 需要
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # 更新日志需要完整历史
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # windows-latest 预装完整 VS（含 ARM64 工具链），交叉编译 aarch64 原生支持
+          targets: x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend deps
+        run: npm ci
+
+      # 版本号从 tag 自动同步到 5 处（package.json / Cargo.toml / tauri.conf.json / about.html / about.ts）
+      - name: Sync version from tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $v = $env:TAG -replace '^v',''
+          node scripts/sync-version.mjs $v
+
+      # 前端只构建一次（不依赖 tauri 的 beforeBuildCommand 是否生效），后续各构建步骤均用 beforeBuildCommand:null 复用
+      - name: Build frontend
+        run: npm run build
+
+      # ---- 构建（先出便携包，再出安装包；前端已单独构建）----
+      - name: Build x64 portable
+        run: npm run tauri build --no-bundle --config '{"build":{"beforeBuildCommand":null}}'
+
+      - name: Build ARM64 portable
+        run: npm run tauri build --target aarch64-pc-windows-msvc --no-bundle --config '{"build":{"beforeBuildCommand":null}}'
+
+      # ---- 代码签名（Authenticode）：有证书才签，无证书跳过（出未签名包）----
+      # 需要的 secrets（可选）：
+      #   WINDOWS_CERTIFICATE         : 证书 PFX 的 base64（去掉换行）
+      #                                 生成：certutil -encode cert.pfx cert.b64 后取其内容（去换行）
+      #   WINDOWS_CERTIFICATE_PASSWORD: PFX 密码
+      # 建议用 EV 代码签名证书，SmartScreen 瞬时建立信誉；OV 需积累信誉。
+      - name: Decode certificate
+        if: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+        run: |
+          $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\onekey.pfx", $bytes)
+
+      - name: Sign portable binaries
+        if: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $st = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -find "**\signtool.exe" | Select-Object -First 1
+          & $st sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f "$env:RUNNER_TEMP\onekey.pfx" /p $env:WINDOWS_CERTIFICATE_PASSWORD src-tauri/target/release/onekey-updater.exe src-tauri/target/aarch64-pc-windows-msvc/release/onekey-updater.exe
+
+      - name: Build x64 installer
+        run: npm run tauri build --config '{"build":{"beforeBuildCommand":null}}'
+
+      - name: Build ARM64 installer
+        run: npm run tauri build --target aarch64-pc-windows-msvc --config '{"build":{"beforeBuildCommand":null}}'
+
+      - name: Sign installers
+        if: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $st = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -find "**\signtool.exe" | Select-Object -First 1
+          $installers = Get-ChildItem src-tauri/target -Recurse -Filter *-setup.exe
+          foreach ($i in $installers) {
+            & $st sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f "$env:RUNNER_TEMP\onekey.pfx" /p $env:WINDOWS_CERTIFICATE_PASSWORD $i.FullName
+          }
+
+      # 便携包改名，与发布资产命名一致（onekey-updater-x64.exe / -arm64.exe）
+      - name: Rename portable binaries
+        run: |
+          Copy-Item src-tauri/target/release/onekey-updater.exe src-tauri/target/release/onekey-updater-x64.exe
+          Copy-Item src-tauri/target/aarch64-pc-windows-msvc/release/onekey-updater.exe src-tauri/target/aarch64-pc-windows-msvc/release/onekey-updater-arm64.exe
+
+      - name: Generate SHA256SUMS
+        run: |
+          $items = @(
+            (Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe),
+            (Get-ChildItem src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe),
+            "src-tauri/target/release/onekey-updater-x64.exe",
+            "src-tauri/target/aarch64-pc-windows-msvc/release/onekey-updater-arm64.exe"
+          )
+          foreach ($f in $items) {
+            $p = if ($f -is [string]) { $f } else { $f.FullName }
+            if (Test-Path $p) {
+              $h = (Get-FileHash $p -Algorithm SHA256).Hash.ToLower()
+              "{0}  {1}" -f $h, [IO.Path]::GetFileName($p) | Add-Content SHA256SUMS.txt
+            }
+          }
+          Get-Content SHA256SUMS.txt
+
+      - name: Build release notes
+        shell: bash
+        run: |
+          prev=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          range="${prev}..HEAD"
+          [ -z "$prev" ] && range="HEAD"
+          {
+            echo "## What's Changed"
+            git log --pretty=format:"- %s (%h)" "$range"
+            echo
+          } > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: OneKey Updater ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
+            src-tauri/target/release/onekey-updater-x64.exe
+            src-tauri/target/aarch64-pc-windows-msvc/release/onekey-updater-arm64.exe
+            SHA256SUMS.txt
+          draft: false
+          prerelease: false
