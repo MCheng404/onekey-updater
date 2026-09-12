@@ -1,6 +1,17 @@
 // 隐藏发布版的控制台窗口
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// 编译期保护：release 构建却处于 dev 模式，说明漏了 `custom-protocol` feature
+// （tauri 的 build.rs 里 `dev = !custom-protocol`）。此时 exe 会去连
+// http://localhost:1420 而不是加载内嵌资源，表现为白屏 /「无法访问此页面」。
+// 直接报错，避免静默产出坏包。
+#[cfg(all(dev, not(debug_assertions)))]
+compile_error!(
+    "release 构建缺少 `custom-protocol` feature，产出的 exe 会以 dev 模式启动并尝试连接 \
+     http://localhost:1420。请改用 `npm run tauri build`（推荐），\
+     或 `cargo build --release --features custom-protocol`。"
+);
+
 /// 在创建 WebView 之前设置 WebView2 的 Chromium 启动参数。
 ///
 /// 重要：之前启用的 `--ignore-gpu-blocklist --enable-zero-copy

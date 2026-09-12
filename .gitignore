@@ -44,3 +44,6 @@ Thumbs.db
 
 # 构建产物
 SHA256SUMS.txt
+
+# 本地工作数据（Agent 记忆 / 临时工具输出）
+.workbuddy/

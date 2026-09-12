@@ -2,6 +2,7 @@ import './styles.css';
 import { emit } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getVersion } from '@tauri-apps/api/app';
 import {
   DEFAULT_THEME,
   PRESETS,
@@ -23,6 +24,15 @@ import {
   saveSettings,
 } from './app-settings';
 import { t, setLang, getLang, watchLang, type Lang } from './i18n';
+import {
+  DEFAULT_FONT,
+  applyFont,
+  commitFont,
+  loadFont,
+  previewFont,
+  type FontSettings,
+  type FontSource,
+} from './font-settings';
 
 interface NotifyPrefs {
   mode: string;
@@ -43,6 +53,7 @@ const DEFAULT_NOTIFY: NotifyPrefs = {
 let theme: ThemeState = loadTheme();
 let notify: NotifyPrefs = { ...DEFAULT_NOTIFY };
 let appSettings: AppSettings = loadSettings();
+let fontSettings: FontSettings = loadFont();
 
 const POS_LABELS: Record<string, { label: string; hint: string }> = {
   'top-left': {
@@ -222,6 +233,13 @@ function bindModeSelector(): void {
 }
 
 /* ============ 开机自启动 ============ */
+
+/** 自启动延迟滑块仅在开启自启动时才有意义，关闭时隐藏 */
+function syncAutostartDelayRow(enabled: boolean): void {
+  const row = document.getElementById('rowAutostartDelay');
+  if (row) row.hidden = !enabled;
+}
+
 function bindAutostart(): void {
   try {
     const toggle = el<HTMLInputElement>('toggleAutostart');
@@ -229,14 +247,18 @@ function bindAutostart(): void {
     void invoke<boolean>('get_autostart')
       .then((enabled) => {
         toggle.checked = enabled;
+        syncAutostartDelayRow(enabled);
       })
       .catch(() => undefined);
 
     toggle.addEventListener('change', (e) => {
       const enabled = (e.target as HTMLInputElement).checked;
+      syncAutostartDelayRow(enabled);
       void invoke('set_autostart', { enable: enabled }).catch((err) => {
         console.warn('[settings] 开机自启动设置失败', err);
+        // 写入失败时回滚 UI
         toggle.checked = !enabled;
+        syncAutostartDelayRow(!enabled);
       });
     });
   } catch (e) {
@@ -278,7 +300,173 @@ function applyI18nTexts(): void {
   }
 }
 
-/* ============ 关于按钮 ============ */
+/* ============ 字体 ============ */
+
+function syncFontControls(): void {
+  document.querySelectorAll<HTMLElement>('[data-font-src]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.fontSrc === fontSettings.source);
+  });
+  el('fontPaneSystem').hidden = fontSettings.source !== 'system';
+  el('fontPaneFile').hidden = fontSettings.source !== 'file';
+
+  el<HTMLInputElement>('rangeFontScale').value = String(Math.round(fontSettings.scale * 100));
+  el('valFontScale').textContent = `${Math.round(fontSettings.scale * 100)}%`;
+
+  el('fontFilePath').textContent = fontSettings.customPath || '未选择字体文件';
+  const dirSel = el<HTMLSelectElement>('selectDirFont');
+  el('rowFontDirList').hidden = dirSel.options.length === 0;
+
+  if (fontSettings.family) el<HTMLSelectElement>('selectSystemFont').value = fontSettings.family;
+}
+
+function setFontSource(src: FontSource): void {
+  fontSettings.source = src;
+  // 首次切到系统字体时，先把下拉框当前值带上，避免出现"选了来源但没字族"
+  if (src === 'system' && !fontSettings.family) {
+    const v = el<HTMLSelectElement>('selectSystemFont').value;
+    if (v) fontSettings.family = v;
+  }
+  commitFont(fontSettings);
+  syncFontControls();
+}
+
+async function loadSystemFonts(): Promise<void> {
+  const sel = el<HTMLSelectElement>('selectSystemFont');
+  sel.innerHTML = '<option value="">读取中…</option>';
+
+  let fonts: string[] = [];
+  try {
+    fonts = await invoke<string[]>('list_system_fonts');
+  } catch (e) {
+    console.warn('[settings] 读取系统字体失败', e);
+  }
+
+  if (fonts.length === 0) {
+    sel.innerHTML = '<option value="">（未读取到系统字体）</option>';
+    return;
+  }
+
+  sel.replaceChildren();
+  for (const name of fonts) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.append(opt);
+  }
+  if (fontSettings.family && fonts.includes(fontSettings.family)) {
+    sel.value = fontSettings.family;
+  }
+}
+
+/** 把某个字体文件设为当前字体 */
+async function useFontFile(path: string): Promise<void> {
+  try {
+    await invoke('set_ui_font_file', { path });
+  } catch (e) {
+    console.warn('[settings] 设置字体文件失败', e);
+    return;
+  }
+  fontSettings.source = 'file';
+  fontSettings.customPath = path;
+  fontSettings.customName = path.split(/[\\/]/).pop() ?? path;
+  commitFont(fontSettings);
+  syncFontControls();
+}
+
+function bindFontControls(): void {
+  document.querySelectorAll<HTMLElement>('[data-font-src]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const src = btn.dataset.fontSrc as FontSource | undefined;
+      if (src) setFontSource(src);
+    });
+  });
+
+  el<HTMLSelectElement>('selectSystemFont').addEventListener('change', (e) => {
+    fontSettings.family = (e.target as HTMLSelectElement).value;
+    fontSettings.source = 'system';
+    commitFont(fontSettings);
+    syncFontControls();
+  });
+
+  el('btnPickFontFile').addEventListener('click', () => {
+    void (async () => {
+      const path = await invoke<string | null>('pick_font_file').catch(() => null);
+      if (path) await useFontFile(path);
+    })();
+  });
+
+  el('btnPickFontDir').addEventListener('click', () => {
+    void (async () => {
+      const dir = await invoke<string | null>('pick_font_dir').catch(() => null);
+      if (!dir) return;
+
+      const files = await invoke<string[]>('list_font_files', { dir }).catch(() => []);
+      const sel = el<HTMLSelectElement>('selectDirFont');
+      sel.replaceChildren();
+
+      if (files.length === 0) {
+        el('fontFilePath').textContent = `该文件夹里没有字体文件：${dir}`;
+        syncFontControls();
+        return;
+      }
+      for (const f of files) {
+        const opt = document.createElement('option');
+        opt.value = f;
+        opt.textContent = f.split(/[\\/]/).pop() ?? f;
+        sel.append(opt);
+      }
+      await useFontFile(files[0]);
+    })();
+  });
+
+  el<HTMLSelectElement>('selectDirFont').addEventListener('change', (e) => {
+    const path = (e.target as HTMLSelectElement).value;
+    if (path) void useFontFile(path);
+  });
+
+  const range = el<HTMLInputElement>('rangeFontScale');
+  range.addEventListener('input', (e) => {
+    const pct = Number((e.target as HTMLInputElement).value);
+    fontSettings.scale = pct / 100;
+    el('valFontScale').textContent = `${pct}%`;
+    // 拖动时只做实时预览；松手（change）才落盘 + 广播，避免刷爆 localStorage
+    previewFont(fontSettings);
+  });
+  range.addEventListener('change', () => commitFont(fontSettings));
+
+  el('btnFontReset').addEventListener('click', () => {
+    void (async () => {
+      await invoke('set_ui_font_file', { path: null }).catch(() => undefined);
+      fontSettings = { ...DEFAULT_FONT };
+      commitFont(fontSettings);
+      syncFontControls();
+    })();
+  });
+}
+
+/* ============ 日志 ============ */
+function bindLogControls(): void {
+  try {
+    el('btnOpenLog').addEventListener('click', () => {
+      void invoke('open_log_dir').catch((err) => {
+        console.warn('[settings] 打开日志文件夹失败', err);
+      });
+    });
+  } catch (e) {
+    console.warn('[settings] 日志按钮绑定失败', e);
+  }
+
+  // 展示日志目录，方便用户手动去翻
+  void invoke<string>('get_log_dir')
+    .then((dir) => {
+      el('logPath').textContent = dir;
+    })
+    .catch(() => {
+      el('logPath').textContent = '—';
+    });
+}
+
+/* ============ 关于区块 ============ */
 function bindAbout(): void {
   try {
     const btn = el<HTMLButtonElement>('btnOpenAbout');
@@ -288,6 +476,15 @@ function bindAbout(): void {
   } catch (e) {
     console.warn('[settings] 关于按钮绑定失败', e);
   }
+
+  // 版本号从运行时读取，避免 HTML 里硬编码的版本号与包版本不一致
+  void getVersion()
+    .then((v) => {
+      el('settingsVersion').textContent = v;
+    })
+    .catch(() => {
+      el('settingsVersion').textContent = '—';
+    });
 }
 
 /* ============ 通知偏好 ============ */
@@ -541,6 +738,19 @@ async function init(): Promise<void> {
 
   /* 10. 关于按钮 */
   bindAbout();
+
+  /* 11. 日志入口 */
+  bindLogControls();
+
+  /* 12. 字体 */
+  try {
+    applyFont(fontSettings);
+    bindFontControls();
+    syncFontControls();
+    void loadSystemFonts();
+  } catch (e) {
+    console.warn('[init] 字体设置初始化失败', e);
+  }
 }
 
 void init();

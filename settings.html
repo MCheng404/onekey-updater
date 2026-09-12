@@ -106,6 +106,59 @@
         </section>
 
         <section class="settings-section">
+          <h2>字体</h2>
+          <div class="field-row">
+            <label>字体来源</label>
+            <div class="mode-selector">
+              <button class="mode-btn" data-font-src="builtin" type="button">内置</button>
+              <button class="mode-btn" data-font-src="system" type="button">系统字体</button>
+              <button class="mode-btn" data-font-src="file" type="button">字体文件</button>
+            </div>
+          </div>
+
+          <!-- 系统字体 -->
+          <div class="font-pane" id="fontPaneSystem" hidden>
+            <div class="field-row">
+              <label for="selectSystemFont">系统字族</label>
+              <select id="selectSystemFont" class="select-input font-select"></select>
+            </div>
+          </div>
+
+          <!-- 自定义字体文件 -->
+          <div class="font-pane" id="fontPaneFile" hidden>
+            <div class="field-row">
+              <label>选择方式</label>
+              <button class="mini-btn" id="btnPickFontFile" type="button">选字体文件…</button>
+              <button class="mini-btn" id="btnPickFontDir" type="button">选字体文件夹…</button>
+            </div>
+            <div class="field-row" id="rowFontDirList" hidden>
+              <label for="selectDirFont">文件夹内字体</label>
+              <select id="selectDirFont" class="select-input font-select"></select>
+            </div>
+            <p class="field-hint mono" id="fontFilePath">未选择字体文件</p>
+          </div>
+
+          <div class="field-row">
+            <label for="rangeFontScale">字号</label>
+            <input type="range" id="rangeFontScale" min="85" max="140" step="1" />
+            <span class="field-value mono" id="valFontScale">100%</span>
+          </div>
+
+          <div class="font-preview">
+            <div class="fp-title">字体预览 FONT PREVIEW</div>
+            <div class="fp-body">
+              系统一键更新 0123456789 ABCDEFG abcdefg
+              <br />
+              统一管理 npm / winget / pip / OpenClaw 四源软件更新
+            </div>
+          </div>
+
+          <div class="settings-actions">
+            <button class="mini-btn" id="btnFontReset" type="button">恢复默认字体</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
           <h2>通知</h2>
           <div class="not-mode-row">
             <label class="not-mode-card">
@@ -170,11 +223,22 @@
         </section>
 
         <section class="settings-section">
+          <h2>日志</h2>
+          <p class="field-hint">
+            运行日志按天写入本地文件。更新失败时，主界面列表会出现「更新失败 · 查看日志」入口。
+          </p>
+          <p class="field-hint mono" id="logPath">—</p>
+          <div class="settings-actions">
+            <button class="mini-btn" id="btnOpenLog">打开日志文件夹</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
           <h2>关于</h2>
           <div class="about-row">
             <div class="about-info">
               <div class="about-name">一键更新</div>
-              <div class="about-version">版本 0.1.0</div>
+              <div class="about-version">版本 <span class="mono" id="settingsVersion">—</span></div>
               <div class="about-desc">统一管理 npm / winget / pip / OpenClaw 四源软件更新</div>
             </div>
             <button class="btn btn-primary" id="btnOpenAbout">

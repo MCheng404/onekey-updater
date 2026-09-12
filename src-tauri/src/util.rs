@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{mpsc, RwLock};
 use std::time::Duration;
@@ -192,6 +193,55 @@ pub fn run_stream_with_timeout<F: FnMut(&str)>(
             }
         }
     }
+}
+
+/// 执行一段 PowerShell 脚本并返回 stdout。
+///
+/// **为什么不用 `-Command "<脚本>"`**：`base_command` 会再套一层 `cmd /D /C`，
+/// 而 cmd 有自己的解析规则（不认 `\"`、把换行当命令分隔）。多行脚本 +
+/// 引号经过这一层会被截断或改写，脚本静默失败——症状就是"读取不到系统字体"、
+/// 图标注册表扫描永远返回空。
+///
+/// 落盘成临时 .ps1 再用 `-File` 执行，可以彻底绕开所有引号/换行转义问题。
+pub fn run_powershell(script: &str, timeout_secs: u64) -> Result<String, String> {
+    let path = temp_script_path();
+
+    // PowerShell 5.1 读不带 BOM 的文件会按 ANSI 解码，中文脚本会乱码，
+    // 所以必须写入 UTF-8 BOM。
+    let mut bytes = vec![0xEF, 0xBB, 0xBF];
+    bytes.extend_from_slice(script.as_bytes());
+    std::fs::write(&path, bytes).map_err(|e| format!("写入临时脚本失败: {}", e))?;
+
+    let path_str = path.to_string_lossy().to_string();
+    let result = run_capture_with_timeout(
+        "powershell",
+        &[
+            "-NoProfile",
+            "-NonInteractive",
+            // CREATE_NO_WINDOW 只作用于直接子进程（cmd）。
+            // powershell.exe 是控制台程序，作为"孙进程"启动时会自己要一个控制台，
+            // 于是冒出闪烁的黑窗——必须显式让它隐藏窗口。
+            "-WindowStyle",
+            "Hidden",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            &path_str,
+        ],
+        timeout_secs,
+    );
+
+    let _ = std::fs::remove_file(&path);
+    result
+}
+
+fn temp_script_path() -> PathBuf {
+    let dir = std::env::var("TEMP").unwrap_or_else(|_| ".".to_string());
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    PathBuf::from(dir).join(format!("onekey-{}-{}.ps1", std::process::id(), nanos))
 }
 
 /// 命令是否可用

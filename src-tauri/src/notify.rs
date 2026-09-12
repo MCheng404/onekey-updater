@@ -3,16 +3,18 @@ use crate::util::now_time;
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow};
 
-/// 通知窗口尺寸
-const NOTIFY_W: u32 = 360;
-const NOTIFY_H: u32 = 92;
-/// 屏幕边距
-const SCREEN_PAD: i32 = 24;
-/// 通知之间堆叠间距
-#[allow(dead_code)]
-const NOTIFY_GAP: i32 = 10;
+/// 通知窗口逻辑宽度（CSS px）。
+/// 需与 styles.css 中 `.toast`(340px) + `.toast-root` 左右内边距(各 10px) 之和一致。
+const NOTIFY_W: f64 = 360.0;
+/// 单条 toast 的基准逻辑高度（`.toast` min-height 84 + 上下内边距 24）。
+/// 前端收到事件后会用实测高度覆盖，这里只用于首次显示时的兜底。
+const NOTIFY_BASE_H: f64 = 108.0;
+/// 窗口最小逻辑高度，避免高度为 0 时窗口不可见
+const NOTIFY_MIN_H: f64 = 60.0;
+/// 屏幕边距（逻辑 px）
+const SCREEN_PAD: f64 = 24.0;
 
 /// 默认通知偏好（独立应用通知、底部居中、显示 4 秒、透明度 88%）
 pub fn default_prefs() -> NotifyPrefs {
@@ -58,8 +60,11 @@ pub fn save_prefs(_app: &AppHandle, prefs: NotifyPrefs) -> Result<(), String> {
 /// 整个脚本在 spawn_blocking 里执行，不阻塞主线程。
 /// 失败时静默返回，不影响核心更新流程。
 pub fn show_native(title: &str, body: &str) -> Result<(), String> {
-    let t = title.replace('\'', "''").replace('"', "`\"");
-    let b = body.replace('\'', "''").replace('"', "`\"");
+    // 文本会被嵌入 PowerShell 的单引号字符串（'...'）中。
+    // 单引号字符串里唯一的转义是 ''（两个单引号），反引号不是转义符——
+    // 之前把 " 替换成 `" 会导致通知正文里出现多余的反引号。
+    let t = escape_ps_single(title);
+    let b = escape_ps_single(body);
     let script = format!(
         r#"
 $ErrorActionPreference = 'SilentlyContinue'
@@ -78,11 +83,16 @@ $notify.Dispose()
         t = t,
         b = b,
     );
-    crate::util::run_capture(
-        "powershell",
-        &["-NoProfile", "-NonInteractive", "-Command", &script],
-    )?;
+    // 走 run_powershell（落盘 + -File）：脚本是多行的，经 cmd /C ... -Command
+    // 会被解析坏而静默失败（通知一直发不出来就是这个原因）。
+    crate::util::run_powershell(&script, 20)?;
     Ok(())
+}
+
+/// 转义要嵌入 PowerShell 单引号字符串的文本：仅需把 ' 变成 ''，
+/// 并去除换行（避免破坏单行命令结构）。
+fn escape_ps_single(s: &str) -> String {
+    s.replace(['\r', '\n'], " ").replace('\'', "''")
 }
 
 /// 显示应用内 Toast（独立通知窗口）。
@@ -105,13 +115,17 @@ pub fn show_toast(app: &AppHandle, title: &str, body: &str, level: &str) -> Resu
         return Err("通知窗口未配置".into());
     };
 
-    // 重新定位 + 重新设定尺寸
-    position_window(&window, &prefs.position)?;
-    let _ = window.set_size(PhysicalSize::new(NOTIFY_W, NOTIFY_H));
+    // 先按单条通知做一次兜底布局，**再**显示窗口。
+    // 顺序很重要：反过来（先 show 后 layout）窗口会以"上一次的旧位置/旧尺寸"
+    // 先渲染一帧才被挪走，肉眼就是"莫名其妙闪一下的窗口"。
+    // layout 在隐藏状态下拿不到显示器时会自行跳过，前端随后用 layout_notify 校正。
+    let _ = layout(&window, &prefs.position, NOTIFY_BASE_H);
 
-    // 把窗口显出来（不抢焦点，前端接管动画 + 倒计时关闭）
     let _ = window.unminimize();
     let _ = window.show();
+
+    // 显示后再校正一次（此时必定能拿到有效显示器），确保位置准确
+    let _ = layout(&window, &prefs.position, NOTIFY_BASE_H);
 
     // 推送消息
     let payload = json!({
@@ -126,52 +140,54 @@ pub fn show_toast(app: &AppHandle, title: &str, body: &str, level: &str) -> Resu
     Ok(())
 }
 
-/// 按用户偏好，把通知窗口定位到屏幕某个角落。
+/// 按当前 toast 数量，重新设置通知窗口的尺寸与位置。
 ///
-/// 使用 work_area（工作区）而非全屏尺寸，避免被任务栏遮挡。
-pub fn position_window(window: &tauri::WebviewWindow, position: &str) -> Result<(), String> {
+/// 之所以要动态改尺寸：窗口透明区域仍会拦截鼠标事件，
+/// 若窗口固定按最大条数留白，会挡住下方其它窗口的点击。
+/// 因此窗口高度必须与内容等高。
+///
+/// - `top-*`    窗口顶边贴工作区顶边（新通知向下生长）
+/// - `bottom-*` 窗口底边贴工作区底边（新通知向上生长）
+///
+/// `height_css` 由前端实测（CSS px），Rust 侧按显示器缩放系数换算。
+pub fn layout(window: &WebviewWindow, position: &str, height_css: f64) -> Result<(), String> {
     let monitor = window
         .current_monitor()
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "无法获取主显示器".to_string())?;
 
-    // 使用工作区尺寸（排除任务栏等系统栏），而非全屏尺寸
-    let work_area = monitor.work_area();
-    let sx = work_area.size.width as i32;
-    let sy = work_area.size.height as i32;
-    let ox = work_area.position.x;
-    let oy = work_area.position.y;
+    let scale = monitor.scale_factor();
+    // 工作区（排除任务栏）换算到逻辑坐标
+    let work = monitor.work_area();
+    let work_w = work.size.width as f64 / scale;
+    let work_h = work.size.height as f64 / scale;
+    let ox = work.position.x as f64 / scale;
+    let oy = work.position.y as f64 / scale;
 
-    // 注意：NOTIFY_H 是单条通知高度；实际窗口内部前端再 stack
-    let (x, y) = match position {
-        "top-left" => (ox + SCREEN_PAD, oy + SCREEN_PAD),
-        "top-center" => (ox + (sx - NOTIFY_W as i32) / 2, oy + SCREEN_PAD),
-        "top-right" => (ox + sx - NOTIFY_W as i32 - SCREEN_PAD, oy + SCREEN_PAD),
-        "bottom-left" => (ox + SCREEN_PAD, oy + sy - NOTIFY_H as i32 - SCREEN_PAD),
-        "bottom-center" => (
-            ox + (sx - NOTIFY_W as i32) / 2,
-            oy + sy - NOTIFY_H as i32 - SCREEN_PAD,
-        ),
-        "bottom-right" => (
-            ox + sx - NOTIFY_W as i32 - SCREEN_PAD,
-            oy + sy - NOTIFY_H as i32 - SCREEN_PAD,
-        ),
-        _ => (
-            ox + sx - NOTIFY_W as i32 - SCREEN_PAD,
-            oy + sy - NOTIFY_H as i32 - SCREEN_PAD,
-        ),
+    let h = height_css.max(NOTIFY_MIN_H);
+    let w = NOTIFY_W;
+
+    window
+        .set_size(LogicalSize::new(w, h))
+        .map_err(|e| e.to_string())?;
+
+    let is_top = position.starts_with("top");
+    let y = if is_top {
+        oy + SCREEN_PAD
+    } else {
+        oy + work_h - h - SCREEN_PAD
+    };
+
+    let x = if position.ends_with("left") {
+        ox + SCREEN_PAD
+    } else if position.ends_with("center") {
+        ox + (work_w - w) / 2.0
+    } else {
+        ox + work_w - w - SCREEN_PAD
     };
 
     window
-        .set_position(PhysicalPosition::new(x, y))
+        .set_position(LogicalPosition::new(x, y))
         .map_err(|e| e.to_string())?;
     Ok(())
-}
-
-/// 计算"如果再新增一条 toast 时，窗口需要向上/向下平移多少"。
-/// 当前实现单窗口单 toast 模式，所以此函数仅用于扩展预留。
-#[allow(dead_code)]
-pub fn stack_offset(position: &str, index: u32) -> i32 {
-    let dir = if position.starts_with("top") { 1 } else { -1 };
-    dir * (index as i32) * (NOTIFY_H as i32 + NOTIFY_GAP)
 }

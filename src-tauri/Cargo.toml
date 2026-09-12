@@ -1,6 +1,6 @@
 [package]
 name = "onekey-updater"
-version = "0.2.0"
+version = "2.1.0"
 description = "系统一键更新工具"
 authors = ["Cookies"]
 edition = "2021"
@@ -9,6 +9,12 @@ rust-version = "1.77.2"
 [lib]
 name = "onekey_updater_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# 生产构建必须启用：开启后 tauri 才会把 frontendDist 的资源打进 exe，
+# 否则会以 dev 模式启动、去连 devUrl（http://localhost:1420）→ 白屏/「无法访问此页面」。
+# `npm run tauri build` 会自动带上；手动构建用 `--features custom-protocol`。
+custom-protocol = ["tauri/custom-protocol"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

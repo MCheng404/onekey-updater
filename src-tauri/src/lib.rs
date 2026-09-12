@@ -1,4 +1,6 @@
+mod font;
 mod icon;
+mod logfile;
 mod model;
 mod notify;
 mod sources;
@@ -12,7 +14,17 @@ use sources::{
     npm::NpmSource, openclaw::OpenclawSource, pip::PipSource, winget::WingetSource, LogFn,
     UpdateSource,
 };
-use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, WebviewWindow};
+
+/// 统一的日志出口：**落盘 + 推送前端**。
+///
+/// 所有日志都必须走这里，不要直接 `app.emit("update-log", ...)`，
+/// 否则日志文件会缺行，用户点「打开日志」看到的就不完整。
+fn emit_log(app: &AppHandle, level: &str, text: impl Into<String>) {
+    let line = LogLine::new(level, text);
+    logfile::append(&line);
+    let _ = app.emit("update-log", line);
+}
 
 /// 探测当前环境：哪些源可用、是否管理员
 ///
@@ -59,12 +71,7 @@ async fn check_updates(app: AppHandle) -> Result<Vec<UpdateItem>, String> {
         for h in handles {
             match h.join() {
                 Ok(mut part) => all.append(&mut part),
-                Err(_) => {
-                    let _ = app.emit(
-                        "update-log",
-                        LogLine::new("err", "某个更新源线程异常终止，已跳过"),
-                    );
-                }
+                Err(_) => emit_log(&app, "err", "某个更新源线程异常终止，已跳过"),
             }
         }
         all
@@ -76,16 +83,15 @@ async fn check_updates(app: AppHandle) -> Result<Vec<UpdateItem>, String> {
 /// 在独立线程里探测单个源
 fn check_one<S: UpdateSource + Send + 'static>(app: AppHandle, source: S) -> Vec<UpdateItem> {
     if !source.available() {
-        let _ = app.emit(
-            "update-log",
-            LogLine::new("warn", format!("跳过 {}（未安装）", source.source().label())),
+        emit_log(
+            &app,
+            "warn",
+            format!("跳过 {}（未安装）", source.source().label()),
         );
         return Vec::new();
     }
 
-    let logger = |level: &str, text: String| {
-        let _ = app.emit("update-log", LogLine::new(level, text));
-    };
+    let logger = |level: &str, text: String| emit_log(&app, level, text);
     source.check(&logger)
 }
 
@@ -95,9 +101,7 @@ async fn start_update(app: AppHandle, items: Vec<UpdateItem>) -> Result<Vec<Item
     let handle = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let logger = |level: &str, text: String| {
-            let _ = handle.emit("update-log", LogLine::new(level, text));
-        };
+        let logger = |level: &str, text: String| emit_log(&handle, level, text);
         let log: LogFn = &logger;
 
         let total = items.len();
@@ -193,6 +197,79 @@ async fn rebuild_icon_cache() -> Result<Vec<IconEntry>, String> {
     .map_err(|e| e.to_string())?
 }
 
+/* ============ 自定义字体 ============ */
+
+/// 枚举系统已安装字族（Rust 侧有缓存，重复调用不会重复扫注册表）
+#[tauri::command]
+async fn list_system_fonts() -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(font::list_system_fonts)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 列出目录下的字体文件（绝对路径）
+#[tauri::command]
+async fn list_font_files(dir: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || font::list_font_files(&dir))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 弹出原生「选择文件夹」对话框
+#[tauri::command]
+async fn pick_font_dir() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(font::pick_dir)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 弹出原生「选择字体文件」对话框
+#[tauri::command]
+async fn pick_font_file() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(font::pick_file)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 设定 / 清除自定义字体文件（传 None 表示恢复内置字体）
+#[tauri::command]
+async fn set_ui_font_file(path: Option<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || font::persist(path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// 查询当前自定义字体文件路径
+#[tauri::command]
+async fn get_ui_font_file() -> Option<String> {
+    font::current().map(|p| p.to_string_lossy().to_string())
+}
+
+/// 查询日志目录路径（设置面板展示用）
+#[tauri::command]
+async fn get_log_dir() -> Result<String, String> {
+    logfile::log_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "无法定位日志目录".to_string())
+}
+
+/// 在文件资源管理器中打开日志文件夹
+#[tauri::command]
+async fn open_log_dir() -> Result<(), String> {
+    let dir = logfile::log_dir().ok_or_else(|| "无法定位日志目录".to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    #[cfg(windows)]
+    {
+        // explorer.exe 打开目录时退出码通常非 0，所以只 spawn 不等结果
+        std::process::Command::new("explorer")
+            .arg(dir.as_os_str())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// 显示一条应用内通知（独立 toast 窗口）。
 /// level: info / ok / warn / err
 ///
@@ -211,6 +288,19 @@ async fn send_notification(
         let _ = notify::show_toast(&app, &title, &body, &level);
     });
     Ok(())
+}
+
+/// 按当前 toast 数量，校正通知窗口的尺寸与位置。
+///
+/// 由通知窗口前端在每次 toast 增删后调用：`height` 是前端实测的内容高度
+/// （CSS px）。窗口必须与内容等高，否则透明留白会拦截鼠标事件。
+#[tauri::command]
+async fn layout_notify(app: AppHandle, height: f64) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("notify") else {
+        return Ok(());
+    };
+    let prefs = notify::load_prefs(&app);
+    notify::layout(&window, &prefs.position, height)
 }
 
 /// 持久化通知偏好
@@ -325,10 +415,50 @@ fn hide_on_close(window: &WebviewWindow) {
     });
 }
 
+/// 把窗口收进当前显示器的工作区，避免高 DPI 下窗口超出屏幕。
+///
+/// `tauri.conf.json` 里的 width/height 是**逻辑像素**。在 150% 缩放的
+/// 1920×1080 屏上，工作区只有约 1280×693 逻辑像素，而配置写的是 1120×760——
+/// 高度就超了，`center()` 之后标题栏会被顶到屏幕外，用户拖都拖不动。
+fn fit_to_work_area(window: &WebviewWindow) {
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+    let scale = monitor.scale_factor();
+    let work = monitor.work_area();
+
+    // 工作区与当前尺寸都换算到逻辑像素再比较
+    let max_w = work.size.width as f64 / scale;
+    let max_h = work.size.height as f64 / scale;
+
+    let Ok(size) = window.outer_size() else {
+        return;
+    };
+    let cur_w = size.width as f64 / scale;
+    let cur_h = size.height as f64 / scale;
+
+    // 留 28px 边距，既避免贴边，也避开任务栏自动隐藏的触发区
+    let pad = 28.0;
+    let w = cur_w.min(max_w - pad);
+    let h = cur_h.min(max_h - pad);
+
+    if w < cur_w - 0.5 || h < cur_h - 0.5 {
+        // 若算出来低于窗口最小尺寸，Tauri 会自动夹回最小值（尽力而为）
+        let _ = window.set_size(LogicalSize::new(w, h));
+        let _ = window.center();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(autostart: bool) {
+    // 必须在建窗口之前把上次选的字体读回内存，否则字体协议会先返回 404
+    font::restore();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        // 字体文件通过自定义协议提供给 WebView：
+        // Windows 上地址是 http://font.localhost/ui
+        .register_uri_scheme_protocol(font::FONT_SCHEME, |_ctx, req| font::serve(&req))
         .setup(move |app| {
             // 设置/通知/关于窗口关闭时改为隐藏而非销毁，下次打开直接 show
             if let Some(window) = app.get_webview_window("settings") {
@@ -339,6 +469,28 @@ pub fn run(autostart: bool) {
             }
             if let Some(window) = app.get_webview_window("about") {
                 hide_on_close(&window);
+            }
+
+            // 后台预热系统字体列表（注册表扫描约 1s）：等用户打开设置面板时
+            // 列表已经就绪，不会看到"读取中…"。顺带在日志里留一条结果记录，
+            // 万一 PowerShell 调用失败能立刻从日志看出来。
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let n = font::list_system_fonts().len();
+                    if n == 0 {
+                        emit_log(&handle, "warn", "未能读取系统字体（PowerShell 调用失败）");
+                    } else {
+                        emit_log(&handle, "info", format!("已加载 {} 个系统字体", n));
+                    }
+                });
+            }
+
+            // 高分屏适配：把各窗口收进当前显示器工作区，避免超出屏幕
+            for label in ["main", "settings", "about"] {
+                if let Some(window) = app.get_webview_window(label) {
+                    fit_to_work_area(&window);
+                }
             }
 
             // 开机自启动模式：主窗口默认隐藏，后台静默检查更新
@@ -371,7 +523,16 @@ pub fn run(autostart: bool) {
             open_about,
             fetch_icons,
             rebuild_icon_cache,
+            get_log_dir,
+            open_log_dir,
+            list_system_fonts,
+            list_font_files,
+            pick_font_dir,
+            pick_font_file,
+            set_ui_font_file,
+            get_ui_font_file,
             send_notification,
+            layout_notify,
             save_notify_prefs,
             load_notify_prefs,
             get_autostart,

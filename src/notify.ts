@@ -16,6 +16,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { ICON } from './icons';
 import { applyTheme, loadTheme, type ThemeState } from './theme';
+import { applyFont, loadFont, watchFont } from './font-settings';
 
 // ============ 类型 ============
 
@@ -61,8 +62,11 @@ const LEVEL_TINT: Record<string, string> = {
   err: 'rgba(248, 113, 113, 0.20)',
 };
 
+// 与 Rust 侧 notify::default_prefs() 及设置面板默认值保持一致。
+// 之前这里写的是 'app'，与后端的 "native" 不一致 —— 一旦 load_notify_prefs
+// 调用失败，界面就会莫名其妙地退成"应用内弹窗"。
 const DEFAULT_PREFS: NotifyPrefs = {
-  mode: 'app',
+  mode: 'native',
   position: 'bottom-right',
   durationMs: 4500,
   opacity: 90,
@@ -71,6 +75,9 @@ const DEFAULT_PREFS: NotifyPrefs = {
 
 const EXIT_ANIM_MS = 280;
 const HIDE_DELAY_MS = 360;
+/** 与 styles.css 中 `.toast-root` 的 gap / 上下 padding 保持一致 */
+const TOAST_GAP = 8;
+const ROOT_PAD = 12;
 
 // ============ 状态 ============
 
@@ -99,6 +106,21 @@ function applyPrefs(): void {
   if (root) {
     root.className = `toast-root dir-${directionFor(prefs.position)} ${alignFor(prefs.position)}`;
   }
+}
+
+/**
+ * 把通知窗口的尺寸/位置同步给 Rust 端。
+ *
+ * 窗口透明留白同样会拦截鼠标点击，因此窗口必须与内容等高：
+ * 这里实测所有 toast 的高度总和 + 间距 + 内边距，交给 Rust 换算物理像素。
+ */
+function syncWindowSize(): void {
+  if (!root) return;
+  const toasts = Array.from(root.querySelectorAll<HTMLElement>('.toast'));
+  if (toasts.length === 0) return;
+  const sum = toasts.reduce((s, el) => s + el.offsetHeight, 0);
+  const height = sum + TOAST_GAP * (toasts.length - 1) + ROOT_PAD * 2;
+  void invoke('layout_notify', { height }).catch(() => undefined);
 }
 
 // ============ Toast DOM 构建 ============
@@ -144,9 +166,14 @@ function buildToastEl(p: ToastPayload): HTMLElement {
   main.append(head, body);
   card.append(stripe, main);
 
-  // 多层背景：级别色调叠加 + 卡片底色
+  // 多层背景：级别色调叠加 + 不透明底。
+  // 第二层必须是 --toast-base 而不是 --bg-card：窗口去掉 acrylic 后没有材质
+  // 兜底，用近乎透明的 --bg-card 会让 toast 在浅色桌面上几乎看不见。
   const tint = LEVEL_TINT[p.level] ?? LEVEL_TINT.info;
-  card.style.background = `linear-gradient(${tint}, ${tint}), var(--bg-card)`;
+  // 给 var() 带上兜底值：万一变量没定义，整条 background 声明会被判为无效而
+  // 整个失效，卡片就只剩一圈 1px 描边、没有底色 —— 正是"只见描边"的成因。
+  const base = 'var(--toast-base, rgba(20, 23, 29, 0.88))';
+  card.style.background = `linear-gradient(${tint}, ${tint}), linear-gradient(${base}, ${base})`;
 
   return card;
 }
@@ -204,6 +231,9 @@ function spawnToast(p: ToastPayload): void {
 
   // 确保窗口可见
   void win?.show().catch(() => undefined);
+
+  // 等新节点完成布局后再测量高度，避免读到 0
+  requestAnimationFrame(() => syncWindowSize());
 }
 
 function dismissToast(id: number, immediate = false): void {
@@ -219,9 +249,14 @@ function dismissToast(id: number, immediate = false): void {
 
   if (immediate) {
     toast.el.remove();
+    syncWindowSize();
   } else {
     toast.el.classList.add('toast-out');
-    window.setTimeout(() => toast.el.remove(), EXIT_ANIM_MS);
+    window.setTimeout(() => {
+      toast.el.remove();
+      // 元素真正移除后再收缩窗口，避免动画期间窗口跳变
+      syncWindowSize();
+    }, EXIT_ANIM_MS);
   }
 
   // 栈空后延迟隐藏窗口（等待退出动画完成）
@@ -241,6 +276,8 @@ async function setupListeners(): Promise<void> {
     const unlisten = await listen<NotifyPrefs>('notify-prefs-changed', (e) => {
       prefs = e.payload;
       applyPrefs();
+      // 位置/堆叠方向变化后重新校正窗口
+      requestAnimationFrame(() => syncWindowSize());
     });
     unlisteners.push(unlisten);
   } catch (e) {
@@ -290,6 +327,14 @@ async function init(): Promise<void> {
     applyTheme(loadTheme());
   } catch (e) {
     console.warn('[notify] 主题应用失败', e);
+  }
+
+  // 3.5 字体
+  try {
+    applyFont(loadFont());
+    watchFont((f) => applyFont(f));
+  } catch (e) {
+    console.warn('[notify] 字体应用失败', e);
   }
 
   // 4. 偏好

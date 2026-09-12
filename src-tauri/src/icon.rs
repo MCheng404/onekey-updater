@@ -1,5 +1,5 @@
 use crate::model::{IconEntry, Source, UpdateItem};
-use crate::util::run_capture;
+use crate::util::run_powershell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -299,10 +299,9 @@ fn save_cache(map: &HashMap<String, String>) {
 /// 同步执行 PS 脚本，返回 (DisplayName → base64 PNG)
 fn build_via_powershell() -> HashMap<String, String> {
     let mut map = HashMap::new();
-    let out = match run_capture(
-        "powershell",
-        &["-NoProfile", "-NonInteractive", "-Command", PS_SCRIPT],
-    ) {
+    // 走 run_powershell（落盘 + -File）：多行脚本经 cmd /C ... -Command
+    // 会被 cmd 的解析规则破坏，脚本静默失败 → 注册表扫描永远返回空。
+    let out = match run_powershell(PS_SCRIPT, 30) {
         Ok(o) => o,
         Err(_) => return map,
     };
@@ -359,11 +358,7 @@ fn load_or_build_cache() -> HashMap<String, String> {
 /// 注意：此函数需要网络连接，且可能较慢。设置 15 秒整体超时。
 fn build_via_winget_manifest() -> HashMap<String, String> {
     let mut map = HashMap::new();
-    let out = match crate::util::run_capture_with_timeout(
-        "powershell",
-        &["-NoProfile", "-NonInteractive", "-Command", PS_WINGET_MANIFEST],
-        15,
-    ) {
+    let out = match run_powershell(PS_WINGET_MANIFEST, 15) {
         Ok(o) => o,
         Err(_) => return map,
     };
@@ -393,7 +388,9 @@ fn build_via_winget_manifest() -> HashMap<String, String> {
             .or_else(|| entry.get("Icon"))
             .and_then(|v| v.as_str());
         if let (Some(i), Some(ic)) = (id, icon) {
-            map.insert(i.to_string(), ic.to_string());
+            // 统一小写存储：winget 包 ID 在 manifest 与 export 间大小写可能不一致，
+            // 查询时也统一小写，避免因大小写差异漏匹配。
+            map.insert(i.to_lowercase(), ic.to_string());
         }
     }
     map
@@ -403,10 +400,7 @@ fn build_via_winget_manifest() -> HashMap<String, String> {
 /// 返回 (快捷方式名称 → base64 PNG)。
 fn build_via_shortcuts() -> HashMap<String, String> {
     let mut map = HashMap::new();
-    let out = match run_capture(
-        "powershell",
-        &["-NoProfile", "-NonInteractive", "-Command", PS_SHORTCUTS],
-    ) {
+    let out = match run_powershell(PS_SHORTCUTS, 30) {
         Ok(o) => o,
         Err(_) => return map,
     };
@@ -440,6 +434,17 @@ fn build_via_shortcuts() -> HashMap<String, String> {
         }
     }
     map
+}
+
+/// 把更新项的 `item.id`（形如 `winget:Microsoft.Foo`）归一化为 winget
+/// manifest 缓存使用的纯包 ID 小写键（`microsoft.foo`）。
+///
+/// 历史 bug：缓存 key 是纯包 ID，查询却用带 `winget:` 前缀的 id，
+/// 导致第一级官方图标永不命中。
+fn winget_manifest_key(id: &str) -> String {
+    id.strip_prefix("winget:")
+        .unwrap_or(id)
+        .to_lowercase()
 }
 
 /// 名称匹配：忽略大小写、子串包含、版本号尾巴差异
@@ -487,9 +492,9 @@ pub fn fill_icons(items: &mut [UpdateItem]) {
     for item in items.iter_mut() {
         let mut matched = false;
 
-        // 第一级：winget manifest
+        // 第一级：winget manifest（item.id 带 winget: 前缀，需归一化后查询）
         if matches!(item.source, Source::Winget) {
-            if let Some(icon) = winget_manifest.get(&item.id) {
+            if let Some(icon) = winget_manifest.get(&winget_manifest_key(&item.id)) {
                 item.icon = Some(icon.clone());
                 matched = true;
             }
@@ -557,9 +562,9 @@ pub fn fetch_icons_blocking(items: &[UpdateItem]) -> (HashMap<String, String>, u
     for item in items {
         let mut matched = false;
 
-        // 第一级：winget manifest（通过包 ID 精确匹配）
+        // 第一级：winget manifest（通过包 ID 精确匹配，item.id 需归一化）
         if matches!(item.source, Source::Winget) {
-            if let Some(icon) = winget_manifest.get(&item.id) {
+            if let Some(icon) = winget_manifest.get(&winget_manifest_key(&item.id)) {
                 out.insert(item.id.clone(), icon.clone());
                 matched = true;
             }

@@ -9,6 +9,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
 import { applyTheme, loadTheme } from './theme';
+import { applyFont, loadFont, watchFont } from './font-settings';
 import { t, getLang, watchLang } from './i18n';
 
 // GitHub 配置
@@ -43,26 +44,39 @@ async function checkUpdate(): Promise<void> {
   status.textContent = t('about.checking');
   status.className = 'about-update-status checking';
 
+  // GitHub API 在国内网络下可能长时间无响应，必须加超时，
+  // 否则按钮会一直处于 disabled 状态，用户以为卡死。
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 8000);
+
   try {
-    if (!REPO_API) {
-      // 仓库未配置时，显示提示
-      status.textContent = t('about.upToDate');
-      status.className = 'about-update-status ok';
-      return;
+    let data: { tag_name?: string; html_url?: string };
+    try {
+      const res = await fetch(REPO_API, {
+        headers: { Accept: 'application/vnd.github.v3+json' },
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      data = await res.json();
+    } finally {
+      window.clearTimeout(timer);
     }
 
-    const res = await fetch(REPO_API, {
-      headers: { Accept: 'application/vnd.github.v3+json' },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const data = await res.json();
-    const latest = data.tag_name?.replace(/^v/, '') ?? '';
+    const latest = (data.tag_name ?? '').replace(/^v/, '');
     const current = await getVersion();
 
+    // 用 DOM 构建而非 innerHTML，避免把远端返回的字符串当 HTML 解析
+    status.replaceChildren();
     if (latest && latest !== current) {
-      status.innerHTML = `${t('about.newVersion')}: <span class="mono">v${latest}</span>`;
+      const line = document.createElement('span');
+      line.append(`${t('about.newVersion')}: `);
+      const ver = document.createElement('span');
+      ver.className = 'mono';
+      ver.textContent = `v${latest}`;
+      line.append(ver);
+      status.append(line);
       status.className = 'about-update-status new';
+
       // 添加下载按钮
       const downloadBtn = document.createElement('button');
       downloadBtn.className = 'btn btn-primary';
@@ -78,8 +92,10 @@ async function checkUpdate(): Promise<void> {
     }
   } catch (e) {
     console.warn('[about] 检查更新失败', e);
-    status.textContent = t('about.upToDate');
-    status.className = 'about-update-status ok';
+    // 网络失败时明确提示错误，而不是谎报"已是最新版本"
+    status.replaceChildren();
+    status.textContent = t('common.error');
+    status.className = 'about-update-status';
   } finally {
     btn.disabled = false;
   }
@@ -100,6 +116,14 @@ async function init(): Promise<void> {
     console.warn('[about] 主题应用失败', e);
   }
 
+  // 2.5 字体
+  try {
+    applyFont(loadFont());
+    watchFont((f) => applyFont(f));
+  } catch (e) {
+    console.warn('[about] 字体应用失败', e);
+  }
+
   // 3. 语言
   try {
     document.documentElement.setAttribute('lang', getLang());
@@ -117,7 +141,7 @@ async function init(): Promise<void> {
     const version = await getVersion();
     el('appVersion').textContent = version;
   } catch {
-    el('appVersion').textContent = '0.2.0';
+    el('appVersion').textContent = '2.1.0';
   }
 
   try {

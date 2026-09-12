@@ -36,6 +36,25 @@
   --font-en: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
 
+  /* Toast 卡片底色。
+     通知窗口是**纯透明**的：既不能设 backgroundColor（会渲染成不透明白/黑底），
+     也不能开 acrylic（材质铺满整个窗口矩形，比卡片宽就在左右各露一条）。
+     所以卡片必须自己撑起可读性 —— 用半透明玻璃色，别用深色实心底。 */
+  --toast-base: rgba(30, 34, 43, 0.55);
+
+  /* 字号缩放：由字体设置写入，1 = 标准。所有文字尺寸都乘以它。
+     基线比旧版整体放大约 8%，并把原先散落的 10 个字号值收敛成 9 个层级。 */
+  --fs: 1;
+  --t-1: calc(10.5px * var(--fs));  /* 角标 / 极小 */
+  --t-2: calc(11.5px * var(--fs));  /* 时间戳 / 失败标 */
+  --t-3: calc(12px * var(--fs));    /* 次要文字 / 标签 */
+  --t-4: calc(12.5px * var(--fs));  /* 版本号 / 日志正文 */
+  --t-5: calc(13px * var(--fs));    /* 面板小标题 */
+  --t-6: calc(13.5px * var(--fs));  /* 按钮 / 分组标题 */
+  --t-7: calc(14px * var(--fs));    /* 条目名称 */
+  --t-8: calc(14.5px * var(--fs));  /* 正文基准 */
+  --t-9: calc(23px * var(--fs));    /* 关于页应用名 */
+
   --accent: #2dd4bf;
   --accent-soft: rgba(45, 212, 191, 0.14);
   --accent-glow: rgba(45, 212, 191, 0.5);
@@ -86,7 +105,7 @@ body {
   background: transparent;
   font-family: var(--font-cn), var(--font-en);
   color: var(--text);
-  font-size: 13.5px;
+  font-size: var(--t-8);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -155,6 +174,9 @@ body.reduce-motion *::after {
   background: var(--bg-root);
   border: 1px solid var(--line);
   transform: translateZ(0);
+  /* 注意：不要在这里加 border-radius。
+     窗口的 acrylic 背景由 DWM 覆盖整个窗口矩形，圆角裁掉的只是 DOM 内容，
+     四个角会露出"方形的模糊底"，比直角更难看。 */
 }
 
 .view {
@@ -187,12 +209,12 @@ body.reduce-motion *::after {
   animation: dotPulse 2.6s ease-in-out infinite;
 }
 .tb-title {
-  font-size: 12.5px;
+  font-size: var(--t-6);
   letter-spacing: 0.5px;
   color: var(--text-dim);
 }
 .tb-badge {
-  font-size: 10.5px;
+  font-size: var(--t-2);
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--accent-soft);
@@ -249,7 +271,7 @@ body.reduce-motion *::after {
 }
 .chip {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-3);
   padding: 3px 10px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -274,7 +296,7 @@ body.reduce-motion *::after {
 /* ============ 按钮 ============ */
 .btn {
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: var(--t-6);
   padding: 8px 16px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line-strong);
@@ -354,7 +376,7 @@ body.reduce-motion *::after {
 .progress-text {
   flex: 0 0 auto;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-3);
   color: var(--text-dim);
 }
 
@@ -384,29 +406,60 @@ body.reduce-motion *::after {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  color: var(--text-faint);
-  font-size: 13.5px;
   pointer-events: none;
   animation: emptyFadeIn 0.5s var(--ease) both;
 }
-.pane-empty::before {
-  content: '';
-  width: 40px;
-  height: 40px;
+.empty-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 0 28px;
+  text-align: center;
+}
+/* 主题色光晕圆环：空状态的主视觉锚点（图标按语义切换，不再是通用转圈） */
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
-  border: 2px solid var(--line);
-  border-top-color: var(--accent);
-  opacity: 0.5;
-  animation: emptyPulse 2s ease-in-out infinite;
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: 0 0 22px -7px var(--accent-glow), inset 0 0 0 1px var(--accent-soft);
+  animation: emptyPulse 3.6s ease-in-out infinite;
+}
+.empty-icon .ico {
+  width: 26px;
+  height: 26px;
+}
+/* 进行态：图标自转，替代外圈脉冲（脉冲与"旋转"的语义会打架） */
+.empty-icon.spin {
+  animation: none;
+}
+.empty-icon.spin .ico {
+  animation: spin 1.15s linear infinite;
+}
+.empty-text {
+  font-size: var(--t-8);
+  line-height: 1.65;
+  color: var(--text-dim);
+  max-width: 300px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 @keyframes emptyFadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
 @keyframes emptyPulse {
-  0%, 100% { transform: scale(1); opacity: 0.4; }
-  50% { transform: scale(1.08); opacity: 0.7; }
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px -8px var(--accent-glow), inset 0 0 0 1px var(--accent-soft);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px -4px var(--accent-glow), inset 0 0 0 1px var(--accent-soft);
+  }
 }
 
 /* ============ 日志面板 ============ */
@@ -424,13 +477,13 @@ body.reduce-motion *::after {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  font-size: 12px;
+  font-size: var(--t-5);
   color: var(--text-dim);
   border-bottom: 1px solid var(--line);
 }
 .mini-btn {
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--t-3);
   padding: 4px 10px;
   border-radius: var(--radius-xs);
   border: 1px solid var(--line);
@@ -469,13 +522,13 @@ body.reduce-motion *::after {
 }
 .log-time {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--t-2);
   color: var(--text-faint);
   padding-top: 1px;
 }
 .log-badge {
   font-family: var(--font-en);
-  font-size: 9.5px;
+  font-size: var(--t-1);
   font-weight: 700;
   letter-spacing: 0.6px;
   padding: 1.5px 6px;
@@ -486,7 +539,7 @@ body.reduce-motion *::after {
 }
 .log-text {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--t-4);
   line-height: 1.6;
   color: var(--text-dim);
   word-break: break-all;
@@ -558,13 +611,13 @@ body.reduce-motion *::after {
   background: rgba(255, 255, 255, 0.022);
 }
 .group-title {
-  font-size: 12.5px;
+  font-size: var(--t-6);
   font-weight: 600;
   letter-spacing: 0.3px;
 }
 .group-count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-3);
   color: var(--text-faint);
   padding: 1px 8px;
   border-radius: 999px;
@@ -625,14 +678,14 @@ body.reduce-motion *::after {
   min-width: 0;
 }
 .item-name {
-  font-size: 13px;
+  font-size: var(--t-7);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   transition: color 0.15s var(--ease);
 }
 .item-meta {
-  font-size: 11px;
+  font-size: var(--t-3);
   color: var(--text-faint);
   margin-top: 3px;
 }
@@ -642,7 +695,7 @@ body.reduce-motion *::after {
   align-items: center;
   gap: 7px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--t-4);
   /* 由 JS 按光标距离实时改写 font-size */
   transition: font-size 0.16s ease-out, opacity 0.16s ease-out;
 }
@@ -687,6 +740,51 @@ body.reduce-motion *::after {
   height: 13px;
 }
 
+/* 更新失败的「查看日志」入口：常驻可见，点击滚动日志面板并高亮 */
+.item-fail {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
+  font-size: var(--t-2);
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 113, 113, 0.38);
+  background: rgba(248, 113, 113, 0.13);
+  color: var(--err);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+    transform 0.12s var(--ease);
+}
+.item-fail:hover {
+  background: rgba(248, 113, 113, 0.22);
+  border-color: rgba(248, 113, 113, 0.6);
+}
+.item-fail:active {
+  transform: translateY(1px);
+}
+.item-fail .ico {
+  width: 11px;
+  height: 11px;
+}
+
+/* 「跳转到日志」时的高亮闪烁 */
+.log-body.log-flash {
+  animation: logFlash 1.3s var(--ease);
+}
+@keyframes logFlash {
+  0% {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px transparent;
+  }
+}
+
 /* 分组依次入场 */
 .group:nth-child(2) {
   animation-delay: 0.05s;
@@ -697,18 +795,21 @@ body.reduce-motion *::after {
 .group:nth-child(4) {
   animation-delay: 0.15s;
 }
+/* 版本号用 dim 而非 faint：距离感应会在其基础上再乘一个 opacity，
+   用 faint(0.44) 叠上 0.7 后整体只剩 ~0.3，暗到几乎读不出来 */
 .v-cur {
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 .v-arrow {
   color: var(--text-faint);
 }
 .v-new {
   color: var(--accent);
+  font-weight: 500;
 }
 .tag {
   font-family: var(--font-cn);
-  font-size: 10px;
+  font-size: var(--t-1);
   padding: 1.5px 7px;
   border-radius: var(--radius-xs);
   border: 1px solid rgba(251, 191, 36, 0.3);
@@ -770,7 +871,7 @@ body.reduce-motion *::after {
   align-items: center;
   justify-content: space-between;
   padding: 0 18px;
-  font-size: 11.5px;
+  font-size: var(--t-4);
   color: var(--text-faint);
   border-top: 1px solid var(--line);
 }
@@ -790,7 +891,7 @@ body.reduce-motion *::after {
 }
 .settings-section h2 {
   margin: 0 0 13px;
-  font-size: 11px;
+  font-size: var(--t-3);
   font-weight: 600;
   letter-spacing: 1.4px;
   color: var(--text-dim);
@@ -829,7 +930,7 @@ body.reduce-motion *::after {
   border: 1px solid rgba(255, 255, 255, 0.09);
 }
 .preset-name {
-  font-size: 12.5px;
+  font-size: var(--t-6);
 }
 
 .field-row {
@@ -841,17 +942,17 @@ body.reduce-motion *::after {
 }
 .field-row label {
   flex: 0 0 88px;
-  font-size: 12.5px;
+  font-size: var(--t-6);
   color: var(--text-dim);
 }
 .field-value {
   flex: 0 0 78px;
-  font-size: 11.5px;
+  font-size: var(--t-4);
   color: var(--text-faint);
 }
 .field-hint {
   margin: 10px 0 0;
-  font-size: 11.5px;
+  font-size: var(--t-4);
   line-height: 1.6;
   color: var(--text-faint);
 }
@@ -939,20 +1040,50 @@ input[type='range'] {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+/* 拇指默认隐形：不滚动时界面保持干净，鼠标进入滚动区才淡入 */
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: transparent;
   border-radius: 999px;
-  transition: background 0.2s var(--ease);
+  transition: background 0.22s var(--ease);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.22);
+.list-scroll:hover::-webkit-scrollbar-thumb,
+.log-body:hover::-webkit-scrollbar-thumb,
+.settings-scroll:hover::-webkit-scrollbar-thumb,
+.about-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
   background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:active {
+/* 指针压到拇指上时再亮一档（同特异性，靠书写顺序覆盖上一条） */
+.list-scroll:hover::-webkit-scrollbar-thumb:hover,
+.log-body:hover::-webkit-scrollbar-thumb:hover,
+.settings-scroll:hover::-webkit-scrollbar-thumb:hover,
+.about-scroll:hover::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
   background-clip: padding-box;
+}
+
+/* ============ 键盘焦点环 ============ */
+/* 只在键盘 Tab 时出现（:focus-visible 会自动排除鼠标点击） */
+.btn:focus-visible,
+.mini-btn:focus-visible,
+.tb-btn:focus-visible,
+.mode-btn:focus-visible,
+.preset:focus-visible,
+.item-action-btn:focus-visible,
+.toast-close:focus-visible,
+.select-input:focus-visible,
+input[type='range']:focus-visible,
+input[type='color']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* 自绘控件：真 input 是隐藏的，焦点环要挂到可见的那层上 */
+.cb input:focus-visible + .box,
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* 半透明毛玻璃上提升文字边缘清晰度 */
@@ -1007,7 +1138,9 @@ input[type='range'] {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 0;
+  /* 上下 12 / 左右 10：与 notify.rs 的 NOTIFY_W 及 notify.ts 的高度测算保持一致，
+     保证 340px 宽的 toast 在 360px 宽的窗口里留出等宽边距 */
+  padding: 12px 10px;
   pointer-events: none;
   /* 由 .dir-* 决定列方向；由 .align-* 决定水平对齐 */
 }
@@ -1042,9 +1175,10 @@ input[type='range'] {
     0 12px 32px rgba(0, 0, 0, 0.45),
     0 2px 8px rgba(0, 0, 0, 0.2),
     0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-    /* 内阴影：卡片内部四周渐变遮罩，提升文字与背景对比度 */
-    inset 0 0 32px rgba(0, 0, 0, 0.35),
-    inset 0 2px 8px rgba(0, 0, 0, 0.2);
+    /* 内阴影只留一点点：之前 0.35/0.2 的黑色内阴影 + 深底色叠加起来，
+       整块卡片会糊成"一层黑色背景"。文字对比交给 text-shadow 处理。 */
+    inset 0 0 26px rgba(0, 0, 0, 0.16),
+    inset 0 1px 6px rgba(0, 0, 0, 0.1);
   overflow: hidden;
   cursor: pointer;
   animation: toastIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -1101,13 +1235,8 @@ input[type='range'] {
   justify-content: center;
   padding: 8px 12px 9px 11px;
   min-width: 0;
-  /* 文字区域额外渐变遮罩：从左到右由深到透明，进一步提升可读性 */
-  background: linear-gradient(
-    90deg,
-    rgba(0, 0, 0, 0.25) 0%,
-    rgba(0, 0, 0, 0.12) 50%,
-    transparent 100%
-  );
+  /* 这里原本有一层黑→透明的渐变遮罩，是"黑背景"观感的另一半来源，
+     且渐变本身就违背纯平要求。可读性已由标题/正文的 text-shadow 保证。 */
 }
 .toast-head {
   display: flex;
@@ -1116,7 +1245,7 @@ input[type='range'] {
   margin-bottom: 4px;
 }
 .toast-title {
-  font-size: 13.5px;
+  font-size: var(--t-8);
   font-weight: 600;
   color: var(--text);
   flex: 1;
@@ -1134,7 +1263,7 @@ input[type='range'] {
 }
 .toast-time {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-3);
   color: var(--text-faint);
   flex: 0 0 auto;
   text-shadow:
@@ -1163,7 +1292,7 @@ input[type='range'] {
   height: 10px;
 }
 .toast-body {
-  font-size: 12.5px;
+  font-size: var(--t-6);
   line-height: 1.6;
   color: var(--text-dim);
   display: -webkit-box;
@@ -1324,12 +1453,12 @@ input[type='range'] {
   gap: 3px;
 }
 .not-mode-card-body strong {
-  font-size: 12.5px;
+  font-size: var(--t-6);
   font-weight: 600;
   color: var(--text);
 }
 .not-mode-card-body small {
-  font-size: 11px;
+  font-size: var(--t-3);
   color: var(--text-faint);
   line-height: 1.55;
 }
@@ -1368,7 +1497,7 @@ input[type='range'] {
   margin-top: 8px;
 }
 .ignore-empty {
-  font-size: 12px;
+  font-size: var(--t-5);
   color: var(--text-faint);
   padding: 12px;
   text-align: center;
@@ -1392,7 +1521,7 @@ input[type='range'] {
   min-width: 0;
 }
 .ignore-name {
-  font-size: 12.5px;
+  font-size: var(--t-6);
   font-family: var(--font-mono);
   color: var(--text);
   white-space: nowrap;
@@ -1400,7 +1529,7 @@ input[type='range'] {
   text-overflow: ellipsis;
 }
 .ignore-kind {
-  font-size: 11px;
+  font-size: var(--t-3);
   color: var(--text-faint);
 }
 .ignore-row .mini-btn {
@@ -1419,7 +1548,7 @@ input[type='range'] {
 .mode-btn {
   flex: 1;
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: var(--t-5);
   font-family: var(--font-cn), var(--font-en);
   color: var(--text-dim);
   background: transparent;
@@ -1440,6 +1569,9 @@ input[type='range'] {
 }
 
 /* ============ 浅色模式适配 ============ */
+[data-theme='light'] {
+  --toast-base: rgba(255, 255, 255, 0.82);
+}
 [data-theme='light'] .toast-close:hover {
   background: rgba(0, 0, 0, 0.08);
 }
@@ -1523,7 +1655,7 @@ input[type='range'] {
 /* ============ 语言选择下拉框 ============ */
 .select-input {
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: var(--t-6);
   padding: 6px 28px 6px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line-strong);
@@ -1563,23 +1695,54 @@ input[type='range'] {
   min-width: 0;
 }
 .about-name {
-  font-size: 13.5px;
+  font-size: var(--t-8);
   font-weight: 600;
   color: var(--text);
 }
 .about-version {
-  font-size: 11.5px;
+  font-size: var(--t-4);
   color: var(--text-dim);
   font-family: var(--font-mono);
   margin-top: 2px;
 }
 .about-desc {
-  font-size: 11.5px;
+  font-size: var(--t-4);
   color: var(--text-faint);
   margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ============ 字体设置面板 ============ */
+.font-pane {
+  padding-left: 2px;
+}
+/* 字体下拉里可能有几百个选项，收窄一点并支持横向滚动 */
+.font-select {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+}
+.font-preview {
+  margin-top: 12px;
+  padding: 13px 15px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--line-strong);
+  background: var(--bg-sunken);
+}
+.fp-title {
+  font-family: var(--font-en);
+  font-size: var(--t-1);
+  letter-spacing: 1.2px;
+  color: var(--text-faint);
+  margin-bottom: 7px;
+}
+.fp-body {
+  font-size: var(--t-8);
+  line-height: 1.75;
+  color: var(--text);
+  word-break: break-word;
 }
 
 /* ============ 关于窗口 ============ */
@@ -1622,7 +1785,7 @@ input[type='range'] {
   50% { box-shadow: 0 0 32px var(--accent-glow); }
 }
 .about-app-name {
-  font-size: 22px;
+  font-size: var(--t-9);
   font-weight: 700;
   color: var(--text);
   margin: 0 0 6px;
@@ -1632,7 +1795,7 @@ input[type='range'] {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--t-5);
   color: var(--text-dim);
   background: var(--bg-card);
   border: 1px solid var(--line);
@@ -1647,7 +1810,7 @@ input[type='range'] {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: var(--t-4);
   color: var(--text-dim);
   background: var(--bg-card);
   border: 1px solid var(--line);
@@ -1669,7 +1832,7 @@ input[type='range'] {
 
 /* 描述 */
 .about-description {
-  font-size: 13px;
+  font-size: var(--t-7);
   line-height: 1.7;
   color: var(--text-dim);
   text-align: center;
@@ -1690,7 +1853,7 @@ input[type='range'] {
   to { opacity: 1; transform: none; }
 }
 .about-section h3 {
-  font-size: 12px;
+  font-size: var(--t-5);
   font-weight: 600;
   color: var(--text-faint);
   text-transform: uppercase;
@@ -1713,7 +1876,7 @@ input[type='range'] {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 12.5px;
+  font-size: var(--t-6);
   color: var(--text-dim);
 }
 .feature-dot {
@@ -1741,7 +1904,7 @@ input[type='range'] {
   border: 1px solid var(--line);
   color: var(--text);
   text-decoration: none;
-  font-size: 13px;
+  font-size: var(--t-7);
   transition: background 0.15s var(--ease), border-color 0.15s var(--ease), transform 0.12s var(--ease);
 }
 .about-link:hover {
@@ -1772,7 +1935,7 @@ input[type='range'] {
   flex-wrap: wrap;
 }
 .about-update-status {
-  font-size: 12.5px;
+  font-size: var(--t-6);
   padding: 6px 12px;
   border-radius: var(--radius-xs);
   display: inline-flex;
@@ -1795,7 +1958,7 @@ input[type='range'] {
 /* 底部 */
 .about-footer {
   text-align: center;
-  font-size: 11px;
+  font-size: var(--t-3);
   color: var(--text-faint);
   padding-top: 16px;
   border-top: 1px solid var(--line);

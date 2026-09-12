@@ -4,6 +4,13 @@ use crate::util::{cmd_exists, compare_version, extract_json_object, par_map, run
 
 pub struct NpmSource;
 
+/// 由专用源负责更新的 npm 全局包。
+///
+/// `openclaw` 有独立的 `OpenClawSource`（升级前后会正确地停止 / 重装 / 重启
+/// gateway），npm 源再列一次不仅重复，还会走错更新流程。这里跳过它们，
+/// 让唯一正确的源接管。
+const DELEGATED_PKGS: &[&str] = &["openclaw"];
+
 impl UpdateSource for NpmSource {
     fn source(&self) -> Source {
         Source::Npm
@@ -89,6 +96,27 @@ impl UpdateSource for NpmSource {
 
         let mut items = Vec::new();
         for (name, current, tag, target) in resolved {
+            // 交给专用源（如 OpenClawSource）处理的包不在这里重复列出
+            if DELEGATED_PKGS.iter().any(|p| name.eq_ignore_ascii_case(p)) {
+                log("cmd", format!("跳过 {}（由专用源处理）", name));
+                continue;
+            }
+
+            // `npm outdated` 偶尔会误报：当 registry 的 latest dist-tag 低于已装
+            // 版本时（例如已装 openclaw 2026.9.4，而 registry 的 latest 还停在
+            // 2026.6.35），npm 仍会把它列为"可更新"。再叠加 beta/dev tag 探测后，
+            // 解析出的目标版本可能恰好等于、甚至低于当前版本 —— 这类条目必须丢掉，
+            // 否则列表里会出现「2026.9.4 → 2026.9.4」这种没有意义的"更新"。
+            if current.chars().any(|c| c.is_ascii_digit())
+                && compare_version(&target, &current) <= 0
+            {
+                log(
+                    "cmd",
+                    format!("{} 目标 {} 不高于已装 {}，忽略", name, target, current),
+                );
+                continue;
+            }
+
             items.push(UpdateItem {
                 id: format!("npm:{}", name),
                 source: Source::Npm,
@@ -118,37 +146,80 @@ impl UpdateSource for NpmSource {
         let label = format!("{}@{}", item.name, tag);
         log("info", format!("正在更新 {}...", label));
 
-        let code = run_stream("npm", &["install", "-g", &label], |line| {
-            log("cmd", line.to_string());
-        });
+        // 输出同时收集下来，失败时用来判断根因
+        // （npm 自身依赖树损坏时只会打印 Cannot find module）
+        let mut captured: Vec<String> = Vec::new();
+        let mut ok = npm_install(&label, log, &mut captured);
 
-        match code {
-            Ok(0) => {
-                log("ok", format!("{} 更新完成", label));
-                true
-            }
-            Ok(_) if tag != "latest" => {
-                log("warn", format!("{} 安装失败，回退到 @latest...", tag));
-                let code = run_stream("npm", &["install", "-g", &format!("{}@latest", item.name)], |line| {
-                    log("cmd", line.to_string());
-                });
-                match code {
-                    Ok(0) => {
-                        log("ok", format!("{}@latest 回退更新完成", item.name));
-                        true
-                    }
-                    _ => {
-                        log("err", format!("{} 更新失败", item.name));
-                        false
-                    }
-                }
-            }
-            _ => {
-                log("err", format!("{} 更新失败", item.name));
-                false
+        // 非 latest tag 装不上时，回退到正式版
+        if !ok && tag != "latest" {
+            log("warn", format!("{} 安装失败，回退到 @latest...", tag));
+            captured.clear();
+            ok = npm_install(&format!("{}@latest", item.name), log, &mut captured);
+            if ok {
+                log("ok", format!("{}@latest 回退更新完成", item.name));
+                return true;
             }
         }
+
+        if !ok {
+            // 更新 npm 自身是特殊情况：正在运行的 npm 一边执行 install、
+            // 一边替换自己所在的 node_modules 树，reify 阶段很容易失败。
+            // 改用 `npx npm@x` 拉起的"外部 npm"来装即可绕开（实测有效）。
+            if item.name == "npm" {
+                let spec = if item.latest.is_empty() || item.latest == "?" {
+                    "latest".to_string()
+                } else {
+                    item.latest.clone()
+                };
+                log(
+                    "warn",
+                    format!("直接自更新失败，改用临时 npm（npx npm@{}）重试...", spec),
+                );
+                captured.clear();
+                let code = run_stream(
+                    "npx",
+                    &["--yes", &format!("npm@{}", spec), "install", "-g", &label],
+                    |line| {
+                        captured.push(line.to_string());
+                        log("cmd", line.to_string());
+                    },
+                );
+                if matches!(code, Ok(0)) {
+                    log("ok", format!("{} 更新完成（经由临时 npm）", label));
+                    return true;
+                }
+            }
+
+            // 出现模块缺失 → 基本可以断定是 npm 自身依赖树残缺
+            if captured
+                .iter()
+                .any(|l| l.contains("MODULE_NOT_FOUND") || l.contains("Cannot find module"))
+            {
+                log("warn", "npm 自身依赖树疑似损坏（Cannot find module）。".into());
+                log(
+                    "warn",
+                    "修复方法：用另一份 Node 自带的 npm 执行 install -g npm@latest，或重新安装 Node.js。"
+                        .into(),
+                );
+            }
+
+            log("err", format!("{} 更新失败", item.name));
+            return false;
+        }
+
+        log("ok", format!("{} 更新完成", label));
+        true
     }
+}
+
+/// 执行一次 npm 全局安装。输出既写入日志，也收集到 `captured` 供失败诊断。
+fn npm_install(label: &str, log: LogFn, captured: &mut Vec<String>) -> bool {
+    let code = run_stream("npm", &["install", "-g", label], |line| {
+        captured.push(line.to_string());
+        log("cmd", line.to_string());
+    });
+    matches!(code, Ok(0))
 }
 
 /// 查询某个 tag 对应的版本号，取不到返回 None

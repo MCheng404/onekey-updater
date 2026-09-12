@@ -16,6 +16,9 @@ A desktop tool for unified software updates across npm, winget, pip, and OpenCla
 - 🌍 **Multi-language support** — Simplified Chinese / English, switch in settings
 - 🚫 **Ignore management** — Ignore this version (auto-recovers after version change) / Ignore forever (blacklist, removable)
 - ⚡ **Auto-start on boot** — Optional auto-start + auto-check on startup, with customizable delay for network authentication (e.g. campus Wi-Fi)
+- 🖋️ **Font customization** — Built-in LXGW Neo XiHei Plus / Inter / JetBrains Mono; change the UI font from the system font list, a directory, or a single font file, with tiered size scaling
+- 📄 **Daily logs** — Logs written to disk per day, open with one click from Settings; click a failed item to jump straight to its log
+- 🔍 **HiDPI aware** — Windows auto-fit to the monitor work area under system DPI scaling
 - 🪟 **About window** — Software intro, GitHub links, check for updates
 - 🖥️ **Dual architecture support** — x64 and ARM64 independent builds
 
@@ -66,12 +69,15 @@ npm run tauri:build -- --target aarch64-pc-windows-msvc
 │   ├── theme.ts           # Theme system
 │   ├── i18n.ts            # Multi-language system
 │   ├── app-settings.ts    # App settings
+│   ├── font-settings.ts   # Font settings
 │   ├── icons.ts           # Icons
 │   └── styles.css         # Global styles
 ├── src-tauri/             # Rust backend
 │   ├── src/
 │   │   ├── main.rs        # Entry point
 │   │   ├── lib.rs         # Command registration
+│   │   ├── font.rs        # System font enumeration / custom fonts
+│   │   ├── logfile.rs     # Daily log persistence
 │   │   ├── sources/       # Update sources
 │   │   │   ├── npm.rs
 │   │   │   ├── winget.rs
