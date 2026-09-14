@@ -16,7 +16,12 @@ impl UpdateSource for PipSource {
     fn check(&self, log: LogFn) -> Vec<UpdateItem> {
         log("info", "正在检查 pip 包更新...".into());
 
-        let out = match run_capture_with_timeout("pip", &["list", "--outdated", "--format=json"], 60) {
+        // --disable-pip-version-check：省掉"检查 pip 自身是否有新版"的那次网络往返
+        let out = match run_capture_with_timeout(
+            "pip",
+            &["list", "--outdated", "--format=json", "--disable-pip-version-check"],
+            45,
+        ) {
             Ok(o) => o,
             Err(e) => {
                 log("err", format!("pip 检查失败：{}", e));

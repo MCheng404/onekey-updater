@@ -953,6 +953,25 @@ async function init() {
   /* 8. 事件监听（单个失败不影响其他） */
   try { await listen<LogLine>('update-log', (e) => appendLog(e.payload)); } catch (e) { console.warn('[init] update-log 监听失败', e); }
   try { await listen<Progress>('update-progress', (e) => onProgress(e.payload)); } catch (e) { console.warn('[init] update-progress 监听失败', e); }
+
+  // 逐源结果：检查过程中哪个源先完成就先显示，不必等最慢的（通常是 winget）
+  try {
+    await listen<{ source: SourceKind; items: UpdateItem[] }>('check-source-result', (e) => {
+      if (!busy) return; // 只在"检查中"合并；收尾时 doCheck 会用完整结果再渲一次
+      const incoming = e.payload.items;
+      if (incoming.length === 0) return;
+
+      const ids = new Set(incoming.map((i) => i.id));
+      items = [...items.filter((i) => !ids.has(i.id)), ...incoming];
+      for (const i of incoming) {
+        if (!isItemIgnored(i.id, i.latest, appSettings)) checked.add(i.id);
+      }
+      scanned = true;
+      renderList(); // 不带入场动画：每来一个源就闪一下不好看
+      refreshActions();
+      setStatusLeft('status.checkPartial', { count: visibleItems().length });
+    });
+  } catch (e) { console.warn('[init] check-source-result 监听失败', e); }
   try {
     await listen<ThemeState>('theme-changed', (e) => {
       theme = e.payload;
@@ -1056,9 +1075,18 @@ async function autostartCheck() {
         level: 'info',
       }).catch(() => undefined);
     } else {
-      // 无更新：保持后台静默运行，不显示窗口
-      // 可选：发送一条"无更新"通知，但为了不打扰用户，这里静默处理
-      console.log('[autostart] 无更新，保持后台静默运行');
+      // 无更新：不再后台常驻。WebView2 的隐藏窗口依然占几十 MB 内存，
+      // 开机自启动这种"检查完就没事了"的场景没必要一直挂着。
+      // 先发一条"已是最新"通知，留一点时间让通知可见（应用内 toast 需要
+      // 存活到动画播完），然后退出进程。
+      void invoke('send_notification', {
+        title: t('notify.noUpdateTitle'),
+        body: t('notify.noUpdate'),
+        level: 'ok',
+      }).catch(() => undefined);
+      window.setTimeout(() => {
+        if (appWindow) void appWindow.close(); // 关闭主窗口 = 退出进程（Rust 侧已绑定）
+      }, 5000);
     }
   } catch (e) {
     console.warn('[autostart] 静默检查失败', e);

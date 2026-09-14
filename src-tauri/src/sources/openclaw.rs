@@ -1,6 +1,8 @@
 use crate::model::{Source, UpdateItem};
 use crate::sources::{LogFn, UpdateSource};
-use crate::util::{cmd_exists, compare_version, is_admin, run_capture_with_timeout, run_stream};
+use crate::util::{
+    cmd_exists, compare_version, extract_json_object, is_admin, run_capture_with_timeout, run_stream,
+};
 
 pub struct OpenclawSource;
 
@@ -21,9 +23,11 @@ impl UpdateSource for OpenclawSource {
         let current = extract_version(&raw);
         log("cmd", format!("当前版本：{}", current));
 
-        // 同时查询正式版（latest）和 beta 版，取较大者作为更新目标
-        let stable_ver = query_npm_version("openclaw@latest");
-        let beta_ver = query_npm_version("openclaw@beta");
+        // 一次 npm view 拿全部 dist-tag（latest / beta），替代两次独立查询 ——
+        // 这是 OpenClaw 源在"检查更新"阶段的主要耗时。
+        let tags = npm_dist_tags("openclaw");
+        let stable_ver = tags.iter().find(|(t, _)| t == "latest").map(|(_, v)| v.clone());
+        let beta_ver = tags.iter().find(|(t, _)| t == "beta").map(|(_, v)| v.clone());
 
         log("cmd", format!("正式版最新：{}", stable_ver.as_deref().unwrap_or("未知")));
         log("cmd", format!("beta 最新：{}", beta_ver.as_deref().unwrap_or("未知")));
@@ -117,18 +121,33 @@ impl UpdateSource for OpenclawSource {
     }
 }
 
-/// 从 `npm view <spec> version` 输出中提取版本号
+/// 一次调用拿到包的全部 dist-tag（latest / beta / dev …）。
 ///
-/// 优化：用 15 秒超时替代默认 30 秒，加快检查速度。
-fn query_npm_version(spec: &str) -> Option<String> {
-    let out = run_capture_with_timeout("npm", &["view", spec, "version"], 15).ok()?;
-    let version = out
-        .lines()
-        .map(|l| l.trim())
-        .filter(|l| !l.is_empty() && !l.contains("ERR"))
-        .last()?
-        .to_string();
-    if version.is_empty() { None } else { Some(version) }
+/// 原来 latest 和 beta 各发一次 `npm view`，现在合并成一次，
+/// 少起一个 npm 进程（约省 1–2 秒）。超时 12 秒。
+fn npm_dist_tags(pkg: &str) -> Vec<(String, String)> {
+    let out = match run_capture_with_timeout("npm", &["view", pkg, "dist-tags", "--json"], 12) {
+        Ok(o) => o,
+        Err(_) => return Vec::new(),
+    };
+    let json = match extract_json_object(&out) {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else {
+        return Vec::new();
+    };
+    let Some(obj) = value.as_object() else {
+        return Vec::new();
+    };
+
+    let mut tags: Vec<(String, String)> = Vec::new();
+    for (k, v) in obj {
+        if let Some(s) = v.as_str() {
+            tags.push((k.clone(), s.to_string()));
+        }
+    }
+    tags
 }
 
 /// 从 `openclaw --version` 输出里提取版本号（优先四位年份版本，如 2026.9.3）

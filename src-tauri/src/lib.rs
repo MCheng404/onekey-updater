@@ -80,6 +80,14 @@ async fn check_updates(app: AppHandle) -> Result<Vec<UpdateItem>, String> {
     .map_err(|e| e.to_string())
 }
 
+/// 单个源检查完成时的回传载荷。
+/// 前端据此逐源渲染 —— 哪个源先查完就先显示，不必等最慢的那个（通常是 winget）。
+#[derive(Clone, serde::Serialize)]
+struct SourceResult {
+    source: Source,
+    items: Vec<UpdateItem>,
+}
+
 /// 在独立线程里探测单个源
 fn check_one<S: UpdateSource + Send + 'static>(app: AppHandle, source: S) -> Vec<UpdateItem> {
     if !source.available() {
@@ -92,7 +100,18 @@ fn check_one<S: UpdateSource + Send + 'static>(app: AppHandle, source: S) -> Vec
     }
 
     let logger = |level: &str, text: String| emit_log(&app, level, text);
-    source.check(&logger)
+    let items = source.check(&logger);
+
+    // 逐源推送结果（前端"边查边出"）。失败不影响返回值，收尾时仍会拿到完整列表。
+    let _ = app.emit(
+        "check-source-result",
+        SourceResult {
+            source: source.source(),
+            items: items.clone(),
+        },
+    );
+
+    items
 }
 
 /// 执行勾选的更新项，日志与进度通过事件推送

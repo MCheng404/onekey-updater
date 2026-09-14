@@ -23,7 +23,7 @@ impl UpdateSource for NpmSource {
     fn check(&self, log: LogFn) -> Vec<UpdateItem> {
         log("info", "正在检查 npm 全局包更新...".into());
 
-        let out = match run_capture_with_timeout("npm", &["outdated", "-g", "--json"], 60) {
+        let out = match run_capture_with_timeout("npm", &["outdated", "-g", "--json"], 45) {
             Ok(o) => o,
             Err(e) => {
                 log("err", format!("npm 检查失败：{}", e));
@@ -74,20 +74,23 @@ impl UpdateSource for NpmSource {
             })
             .collect();
 
-        let resolved = par_map(metas, 8, |(name, current, latest)| {
+        // 提速：每个包只发一次 npm view（拿全部 dist-tag），
+        // 原来是 dev / beta 各发一次 —— N 个包的 npm 进程数从 2N 降到 N。
+        let resolved = par_map(metas, 12, |(name, current, latest)| {
             let mut tag = "latest".to_string();
             let mut target = latest.clone();
 
-            if let Some(dev) = npm_view_version(name, "dev") {
-                if compare_version(&dev, &target) > 0 {
+            let tags = npm_dist_tags(name);
+            if let Some(dev) = tags.iter().find(|(t, _)| t == "dev").map(|(_, v)| v) {
+                if compare_version(dev, &target) > 0 {
                     tag = "dev".to_string();
-                    target = dev;
+                    target = dev.clone();
                 }
             }
-            if let Some(beta) = npm_view_version(name, "beta") {
-                if compare_version(&beta, &target) > 0 {
+            if let Some(beta) = tags.iter().find(|(t, _)| t == "beta").map(|(_, v)| v) {
+                if compare_version(beta, &target) > 0 {
                     tag = "beta".to_string();
-                    target = beta;
+                    target = beta.clone();
                 }
             }
 
@@ -222,29 +225,35 @@ fn npm_install(label: &str, log: LogFn, captured: &mut Vec<String>) -> bool {
     matches!(code, Ok(0))
 }
 
-/// 查询某个 tag 对应的版本号，取不到返回 None
+/// 一次调用拿到包的全部 dist-tag（形如 `{"latest":"1.2.3","beta":"1.3.0-beta.1"}`）。
 ///
-/// 优化：用 15 秒超时替代默认 30 秒，加快 npm 检查速度。
-fn npm_view_version(pkg: &str, tag: &str) -> Option<String> {
-    let spec = format!("{}@{}", pkg, tag);
-    let out = run_capture_with_timeout("npm", &["view", &spec, "version"], 15).ok()?;
-    let first = out.lines().next()?.trim().to_string();
+/// 相比"每个 tag 一次 npm view"，N 个包的 npm 进程数从 2N 降到 N。
+/// 超时用 12 秒（默认 30），网络慢时也不至于拖住整个检查。
+/// 取不到时返回空表，调用方按"没有额外 tag"处理。
+fn npm_dist_tags(pkg: &str) -> Vec<(String, String)> {
+    let out = match run_capture_with_timeout("npm", &["view", pkg, "dist-tags", "--json"], 12) {
+        Ok(o) => o,
+        Err(_) => return Vec::new(),
+    };
+    let json = match extract_json_object(&out) {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else {
+        return Vec::new();
+    };
+    let Some(obj) = value.as_object() else {
+        return Vec::new();
+    };
 
-    if first.is_empty() || first.starts_with("npm ERR") || first.contains("ERR!") {
-        return None;
+    let mut tags: Vec<(String, String)> = Vec::new();
+    for (k, v) in obj {
+        // 只收形如版本号的字符串，避免把 npm 的报错文本当成版本
+        if let Some(s) = v.as_str() {
+            if s.chars().next().map(|c| c.is_ascii_digit()) == Some(true) {
+                tags.push((k.clone(), s.to_string()));
+            }
+        }
     }
-    // 多行输出取最后一行（最新）
-    let last = out
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .last()
-        .unwrap_or(&first)
-        .trim()
-        .to_string();
-
-    if last.chars().next().map(|c| c.is_ascii_digit()) == Some(true) {
-        Some(last)
-    } else {
-        None
-    }
+    tags
 }

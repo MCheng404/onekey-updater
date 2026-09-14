@@ -49,6 +49,7 @@ const zhCN: Record<string, string> = {
   'status.idle': '就绪',
   'status.checking': '正在检查更新…',
   'status.checkDone': '检查完成 · 共 {count} 项可更新',
+  'status.checkPartial': '已发现 {count} 项，仍在检查…',
   'status.ignoredCount': '已忽略 {count} 项',
   'status.iconFailed': '图标加载失败：{error}',
   'status.checkFailed': '检查失败',
@@ -78,6 +79,8 @@ const zhCN: Record<string, string> = {
   'notify.updateComplete': '更新完成',
   'notify.updateFailed': '更新失败',
   'notify.updateResult': '{ok} 项成功 · {failed} 项失败',
+  'notify.noUpdateTitle': '检查完成',
+  'notify.noUpdate': '所有软件已是最新版本',
 
   // ---- 设置窗口 ----
   'settings.title': '设置',
@@ -212,6 +215,7 @@ const enUS: Record<string, string> = {
   'status.idle': 'Ready',
   'status.checking': 'Checking for updates…',
   'status.checkDone': 'Check complete · {count} update(s) available',
+  'status.checkPartial': '{count} found so far, still checking…',
   'status.ignoredCount': '{count} ignored',
   'status.iconFailed': 'Failed to load icons: {error}',
   'status.checkFailed': 'Check failed',
@@ -241,6 +245,8 @@ const enUS: Record<string, string> = {
   'notify.updateComplete': 'Update complete',
   'notify.updateFailed': 'Update failed',
   'notify.updateResult': '{ok} succeeded · {failed} failed',
+  'notify.noUpdateTitle': 'Check complete',
+  'notify.noUpdate': 'All software is up to date',
 
   // ---- Settings window ----
   'settings.title': 'Settings',
