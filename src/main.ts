@@ -120,30 +120,61 @@ let logBody: HTMLElement | null = null;
 let appWindow: ReturnType<typeof getCurrentWindow> | null = null;
 
 /* ============ 日志卡片 ============ */
+/** 待写入的日志（一帧内合并写入，避免每条日志都触发一次重排） */
+let logQueue: LogLine[] = [];
+let logFlushScheduled = false;
+
+/**
+ * 追加日志：先入队，合并到下一帧一次性写 DOM。
+ * 更新过程中日志可能密集到达，逐条 append + 读 scrollHeight 会造成频繁重排。
+ */
 function appendLog(line: LogLine) {
-  if (!logBody) return;
-  const card = document.createElement('div');
-  card.className = `log-card lv-${line.level}`;
+  logQueue.push(line);
+  if (logFlushScheduled) return;
+  logFlushScheduled = true;
+  // 窗口隐藏时 rAF 会被暂停，改为同步落盘到 DOM，避免队列无限增长
+  if (document.hidden) flushLogs();
+  else requestAnimationFrame(flushLogs);
+}
 
-  const time = document.createElement('span');
-  time.className = 'log-time';
-  time.textContent = line.at;
-
-  const badge = document.createElement('span');
-  badge.className = 'log-badge';
-  badge.textContent = LOG_BADGE[line.level] ?? 'LOG';
-
-  const text = document.createElement('span');
-  text.className = 'log-text';
-  text.textContent = line.text;
-
-  card.append(time, badge, text);
-  logBody.append(card);
-
-  while (logBody.childElementCount > MAX_LOG_LINES) {
-    logBody.firstElementChild?.remove();
+function flushLogs() {
+  logFlushScheduled = false;
+  const pane = logBody;
+  if (!pane || logQueue.length === 0) {
+    logQueue.length = 0;
+    return;
   }
-  logBody.scrollTop = logBody.scrollHeight;
+
+  const batch = logQueue;
+  logQueue = [];
+
+  const frag = document.createDocumentFragment();
+  for (const line of batch) {
+    const card = document.createElement('div');
+    card.className = `log-card lv-${line.level}`;
+
+    const time = document.createElement('span');
+    time.className = 'log-time';
+    time.textContent = line.at;
+
+    const badge = document.createElement('span');
+    badge.className = 'log-badge';
+    badge.textContent = LOG_BADGE[line.level] ?? 'LOG';
+
+    const text = document.createElement('span');
+    text.className = 'log-text';
+    text.textContent = line.text;
+
+    card.append(time, badge, text);
+    frag.append(card);
+  }
+  pane.append(frag);
+
+  // 超出上限的旧日志一次性裁掉（只在批量写入后检查一次）
+  let excess = pane.childElementCount - MAX_LOG_LINES;
+  while (excess-- > 0) pane.firstElementChild?.remove();
+
+  pane.scrollTop = pane.scrollHeight;
 }
 
 /**
@@ -197,8 +228,15 @@ function showEmpty(text: string, icon: string, spin = false): void {
   el('emptyText').textContent = text;
 }
 
-function renderList() {
+/**
+ * 渲染列表。
+ * @param animate 是否播放入场动画。仅"新一次扫描完成"时为 true；
+ *   设置变更 / 忽略项 / 更新后移除 / 图标回填一律 false ——
+ *   否则每次交互都会让整表重播一遍入场动画，既闪烁又白白重排。
+ */
+function renderList(animate = false) {
   const scroll = el('listScroll');
+  scroll.classList.toggle('no-anim', !animate);
   scroll.replaceChildren();
   verCache = [];
 
@@ -237,7 +275,7 @@ function renderList() {
   for (const source of SOURCE_ORDER) {
     const group = visible.filter((i) => i.source === source);
     if (group.length === 0) continue;
-    frag.append(buildGroup(source, group, globalIndex));
+    frag.append(buildGroup(source, group, globalIndex, animate));
     globalIndex += group.length;
   }
   scroll.append(frag);
@@ -247,7 +285,16 @@ function renderList() {
   requestAnimationFrame(cacheVerNodes);
 }
 
-function buildGroup(source: SourceKind, group: UpdateItem[], startIndex: number): HTMLElement {
+/** 入场动画的交错步长与上限：超过上限的项不再继续延后，避免长列表末尾项迟到数秒 */
+const STAGGER_STEP_MS = 30;
+const STAGGER_CAP = 20;
+
+function buildGroup(
+  source: SourceKind,
+  group: UpdateItem[],
+  startIndex: number,
+  animate: boolean,
+): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'group';
 
@@ -280,8 +327,11 @@ function buildGroup(source: SourceKind, group: UpdateItem[], startIndex: number)
   const itemFrag = document.createDocumentFragment();
   group.forEach((item, i) => {
     const el = buildItem(item);
-    // 交错进入动画：每项延迟 30ms
-    el.style.animationDelay = `${(startIndex + i) * 30}ms`;
+    // 交错进入动画：每项延迟 30ms，累计到 STAGGER_CAP 项后封顶
+    if (animate) {
+      const slot = Math.min(startIndex + i, STAGGER_CAP);
+      el.style.animationDelay = `${slot * STAGGER_STEP_MS}ms`;
+    }
     itemFrag.append(el);
   });
   body.append(itemFrag);
@@ -293,6 +343,7 @@ function buildGroup(source: SourceKind, group: UpdateItem[], startIndex: number)
 function buildItem(item: UpdateItem): HTMLElement {
   const row = document.createElement('div');
   row.className = `item${checked.has(item.id) ? ' checked' : ''}`;
+  row.dataset.id = item.id; // 供图标就地回填（patchIcons）定位
 
   const cb = document.createElement('input');
   cb.type = 'checkbox';
@@ -415,6 +466,32 @@ function makeCheckbox(input: HTMLInputElement): HTMLElement {
   box.className = 'box';
   label.append(input, box);
   return label;
+}
+
+/**
+ * 图标回填：就地把矢量占位替换为真实 PNG，**不整表重建**。
+ *
+ * fetch_icons 是后置的异步调用（首次要扫注册表，5~10s），返回时列表往往已可见。
+ * 旧实现直接 renderList() 重建整表 —— 会闪烁、重排，并让入场动画重播一遍。
+ */
+function patchIcons(icons: Record<string, string>): void {
+  const nameById = new Map(items.map((i) => [i.id, i.name]));
+  const rows = document.querySelectorAll<HTMLElement>('.list-scroll .item[data-id]');
+  for (const row of rows) {
+    const id = row.dataset.id;
+    if (!id) continue;
+    const src = icons[id];
+    if (!src) continue;
+    const holder = row.querySelector<HTMLElement>('.item-icon');
+    if (!holder || holder.querySelector('img')) continue; // 已有 PNG 就跳过
+
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = nameById.get(id) ?? '';
+    img.draggable = false;
+    holder.classList.remove('item-icon-fallback');
+    holder.replaceChildren(img);
+  }
 }
 
 /* ============ 勾选同步 ============ */
@@ -540,7 +617,7 @@ async function doCheck() {
         .map((i) => i.id),
     );
     scanned = true;
-    renderList();
+    renderList(true); // 新一次扫描完成 —— 播放入场动画
     el('statusLeft').textContent = `检查完成 · 共 ${items.length} 项可更新`;
     el('statusRight').textContent = ignoredCount > 0 ? `已忽略 ${ignoredCount} 项` : '';
 
@@ -551,7 +628,7 @@ async function doCheck() {
         for (const item of items) {
           if (icons[item.id]) item.icon = icons[item.id];
         }
-        renderList();
+        patchIcons(icons); // 就地替换图标，不整表重建
       }
     } catch (e) {
       el('statusRight').textContent = `图标加载失败：${String(e).slice(0, 40)}`;
@@ -628,13 +705,15 @@ const VER_MAX_SIZE = 15.5;
 const VER_RADIUS = 150;
 
 // 缓存的版本号元素及其屏幕中心坐标（避免每次 mousemove 强制重排）
-type VerNode = { el: HTMLElement; cx: number; cy: number };
+// t 记录上一次写入的插值，用于跳过"半径外 / 无变化"的无谓写样式
+type VerNode = { el: HTMLElement; cx: number; cy: number; t: number };
 let verCache: VerNode[] = [];
 
 function cacheVerNodes(): void {
   verCache = Array.from(document.querySelectorAll<HTMLElement>('.item-ver')).map((el) => {
     const r = el.getBoundingClientRect();
-    return { el, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+    // t 置 -1：强制下一帧写一次初始值
+    return { el, cx: r.left + r.width / 2, cy: r.top + r.height / 2, t: -1 };
   });
 }
 
@@ -646,18 +725,23 @@ function setupProximityZoom(): void {
 
   const paint = () => {
     frame = 0;
-    for (const { el, cx, cy } of verCache) {
-      const dx = px - cx;
-      const dy = py - cy;
+    for (const node of verCache) {
+      const dx = px - node.cx;
+      const dy = py - node.cy;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       // smoothstep：靠近时变化柔和，远离时快速回落
       const raw = Math.max(0, Math.min(1, 1 - dist / VER_RADIUS));
       const t = raw * raw * (3 - 2 * raw);
 
-      el.style.fontSize = `${(VER_BASE_SIZE + (VER_MAX_SIZE - VER_BASE_SIZE) * t).toFixed(2)}px`;
+      // 无实质变化就跳过。否则每帧都会给"半径外"的全部元素重写一次基准值，
+      // 触发全表样式重算 + 文本重排 —— 列表一长就掉帧（旧版"卡成 PPT"的根源之一）。
+      if (Math.abs(t - node.t) < 0.008) continue;
+      node.t = t;
+
+      node.el.style.fontSize = `${(VER_BASE_SIZE + (VER_MAX_SIZE - VER_BASE_SIZE) * t).toFixed(2)}px`;
       // 基线透明度不能太低，否则远离光标时版本号几乎不可读
-      el.style.opacity = (0.86 + 0.14 * t).toFixed(3);
+      node.el.style.opacity = (0.86 + 0.14 * t).toFixed(3);
     }
   };
 
@@ -672,9 +756,19 @@ function setupProximityZoom(): void {
     if (!frame) frame = requestAnimationFrame(paint);
   });
 
-  // 滚动 / 窗口尺寸变化 / 列表重建时重新缓存坐标
-  container.addEventListener('scroll', cacheVerNodes, { passive: true });
-  window.addEventListener('resize', cacheVerNodes);
+  // 滚动 / 缩放时重算坐标。scroll 事件可能一帧内触发多次，
+  // 用 rAF 合并成每帧最多一次，避免反复 getBoundingClientRect 强制重排。
+  let cacheQueued = false;
+  const queueCache = () => {
+    if (cacheQueued) return;
+    cacheQueued = true;
+    requestAnimationFrame(() => {
+      cacheQueued = false;
+      cacheVerNodes();
+    });
+  };
+  container.addEventListener('scroll', queueCache, { passive: true });
+  window.addEventListener('resize', queueCache);
 }
 
 /* ============ 初始化 ============ */
@@ -791,7 +885,10 @@ async function init() {
     });
     // 「更新全部」更必须是可见项：items 里含黑名单项，直接用会连被忽略的一起更新
     el('btnUpdateAll').addEventListener('click', () => void doUpdate(visibleItems()));
-    el('btnClearLog').addEventListener('click', () => logBody?.replaceChildren());
+    el('btnClearLog').addEventListener('click', () => {
+      logQueue.length = 0; // 同时丢掉尚未刷入的最新一批，避免清空后又被补回来
+      logBody?.replaceChildren();
+    });
   } catch (e) {
     console.error('[init] 主按钮绑定失败', e);
   }
