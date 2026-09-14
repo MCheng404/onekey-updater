@@ -88,10 +88,10 @@ jobs:
 
       # ---- 构建（先出便携包，再出安装包；前端已单独构建）----
       - name: Build x64 portable
-        run: npm run tauri build --no-bundle --config '{"build":{"beforeBuildCommand":null}}'
+        run: npm run tauri -- build --no-bundle --config '{"build":{"beforeBuildCommand":null}}'
 
       - name: Build ARM64 portable
-        run: npm run tauri build --target aarch64-pc-windows-msvc --no-bundle --config '{"build":{"beforeBuildCommand":null}}'
+        run: npm run tauri -- build --target aarch64-pc-windows-msvc --no-bundle --config '{"build":{"beforeBuildCommand":null}}'
 
       # ---- 代码签名（Authenticode）：有证书才签，无证书跳过（出未签名包）----
       # 需要的 secrets（可选）：
@@ -112,10 +112,10 @@ jobs:
           & $st sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f "$env:RUNNER_TEMP\onekey.pfx" /p $env:WINDOWS_CERTIFICATE_PASSWORD src-tauri/target/release/onekey-updater.exe src-tauri/target/aarch64-pc-windows-msvc/release/onekey-updater.exe
 
       - name: Build x64 installer
-        run: npm run tauri build --config '{"build":{"beforeBuildCommand":null}}'
+        run: npm run tauri -- build --config '{"build":{"beforeBuildCommand":null}}'
 
       - name: Build ARM64 installer
-        run: npm run tauri build --target aarch64-pc-windows-msvc --config '{"build":{"beforeBuildCommand":null}}'
+        run: npm run tauri -- build --target aarch64-pc-windows-msvc --config '{"build":{"beforeBuildCommand":null}}'
 
       - name: Sign installers
         if: env.WINDOWS_CERTIFICATE != ''
