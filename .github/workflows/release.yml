@@ -8,6 +8,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: '手动发布使用的版本 tag，例如 v2.2.0（手动触发时必填）'
+        required: true
+        type: string
 
 concurrency:
   group: release-${{ github.ref }}
@@ -22,6 +27,12 @@ env:
 jobs:
   release:
     runs-on: windows-latest
+    # ⚠️ 血泪教训：`secrets` 上下文不能出现在 if: 里 —— GitHub 会直接判整个工作流文件非法
+    # （Invalid workflow file: Unrecognized named-value: 'secrets'），表现为 0s 失败、连 job 都不启动。
+    # 正确做法：先把 secret 落到 job 级 env（此处允许 secrets），再用 env.X != '' 做条件。
+    env:
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     defaults:
       run:
         shell: pwsh
@@ -51,12 +62,24 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
-      # 版本号从 tag 自动同步到 5 处（package.json / Cargo.toml / tauri.conf.json / about.html / about.ts）
-      - name: Sync version from tag
+      # 解析本次发布的 tag：tag 推送取 ref_name，手动触发取 inputs.tag。
+      # 并把版本号自动同步到 5 处（package.json / Cargo.toml / tauri.conf.json / about.html / about.ts）
+      - name: Resolve release tag
+        id: rel
+        shell: pwsh
         env:
-          TAG: ${{ github.ref_name }}
+          # 用 github.event.inputs 而非 inputs 上下文：前者在任何事件下都可用，
+          # push 触发时解析为空字符串，走 ref_name 分支（避免又踩上下文可用性的坑）
+          IN_TAG: ${{ github.event.inputs.tag }}
         run: |
-          $v = $env:TAG -replace '^v',''
+          $tag = if ($env:IN_TAG) { $env:IN_TAG } else { "${{ github.ref_name }}" }
+          if ($tag -notmatch '^v\d') {
+            throw "需要一个形如 vX.Y.Z 的 tag，当前解析为 '$tag'。手动触发请在输入框填写 tag。"
+          }
+          $v = $tag -replace '^v',''
+          "tag=$tag"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$v"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "发布版本：$v"
           node scripts/sync-version.mjs $v
 
       # 前端只构建一次（不依赖 tauri 的 beforeBuildCommand 是否生效），后续各构建步骤均用 beforeBuildCommand:null 复用
@@ -77,17 +100,13 @@ jobs:
       #   WINDOWS_CERTIFICATE_PASSWORD: PFX 密码
       # 建议用 EV 代码签名证书，SmartScreen 瞬时建立信誉；OV 需积累信誉。
       - name: Decode certificate
-        if: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+        if: env.WINDOWS_CERTIFICATE != ''
         run: |
           $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
           [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\onekey.pfx", $bytes)
 
       - name: Sign portable binaries
-        if: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
-        env:
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        if: env.WINDOWS_CERTIFICATE != ''
         run: |
           $st = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -find "**\signtool.exe" | Select-Object -First 1
           & $st sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f "$env:RUNNER_TEMP\onekey.pfx" /p $env:WINDOWS_CERTIFICATE_PASSWORD src-tauri/target/release/onekey-updater.exe src-tauri/target/aarch64-pc-windows-msvc/release/onekey-updater.exe
@@ -99,9 +118,7 @@ jobs:
         run: npm run tauri build --target aarch64-pc-windows-msvc --config '{"build":{"beforeBuildCommand":null}}'
 
       - name: Sign installers
-        if: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
-        env:
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        if: env.WINDOWS_CERTIFICATE != ''
         run: |
           $st = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -find "**\signtool.exe" | Select-Object -First 1
           $installers = Get-ChildItem src-tauri/target -Recurse -Filter *-setup.exe
@@ -148,7 +165,8 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          name: OneKey Updater ${{ github.ref_name }}
+          tag_name: ${{ steps.rel.outputs.tag }}
+          name: OneKey Updater ${{ steps.rel.outputs.tag }}
           body_path: RELEASE_NOTES.md
           files: |
             src-tauri/target/release/bundle/nsis/*.exe
