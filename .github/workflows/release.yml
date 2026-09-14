@@ -132,6 +132,20 @@ jobs:
           Copy-Item src-tauri/target/release/onekey-updater.exe src-tauri/target/release/onekey-updater-x64.exe
           Copy-Item src-tauri/target/aarch64-pc-windows-msvc/release/onekey-updater.exe src-tauri/target/aarch64-pc-windows-msvc/release/onekey-updater-arm64.exe
 
+      # ⚠️ 安装包必须改成正 ASCII 名再上传。
+      # Tauri 的 NSIS 产物是按 productName 拼的，而 productName 是中文「一键更新」，
+      # 于是文件名是 `一键更新_2.2.0_x64-setup.exe`；GitHub 上传资产时会**剥掉非 ASCII
+      # 字符**，结果变成残缺的 `_2.2.0_x64-setup.exe`，SHA256SUMS 里的名字也就对不上了。
+      # 统一改成 README 里写的 onekey-updater-<ver>-<arch>-setup.exe。
+      # 必须放在 Generate SHA256SUMS 之前，否则校验文件里还是旧名。
+      - name: Rename installers
+        run: |
+          $v = "${{ steps.rel.outputs.version }}"
+          Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe |
+            Rename-Item -NewName "onekey-updater-$v-x64-setup.exe"
+          Get-ChildItem src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*-setup.exe |
+            Rename-Item -NewName "onekey-updater-$v-arm64-setup.exe"
+
       - name: Generate SHA256SUMS
         run: |
           $items = @(
