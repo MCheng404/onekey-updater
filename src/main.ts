@@ -115,6 +115,19 @@ function el<T extends HTMLElement>(id: string): T {
   return node as T;
 }
 
+/** 播放一次性反馈动画：先移除类并强制重排，保证连续触发时动画能重新开始 */
+function pulse(node: HTMLElement, cls: string): void {
+  node.classList.remove(cls);
+  void node.offsetWidth;
+  node.classList.add(cls);
+}
+
+/** 复选框点选反馈：给 .cb 加一次性动画类（勾/横杠弹入 + 方框微弹） */
+function popCheckbox(input: HTMLInputElement): void {
+  const label = input.closest<HTMLElement>('.cb');
+  if (label) pulse(label, 'box-pop');
+}
+
 /* 运行时引用：在 init() 中安全赋值，避免顶层异常阻断整个脚本 */
 let logBody: HTMLElement | null = null;
 let appWindow: ReturnType<typeof getCurrentWindow> | null = null;
@@ -305,6 +318,11 @@ function buildGroup(
   cb.type = 'checkbox';
   cb.dataset.role = 'group';
   cb.dataset.source = source;
+  // 分组复选框要反映当前选中状态。此前重建列表时没设置它，
+  // 于是无论选了多少项，分组头永远显示"未选中"，与下面条目的勾选状态自相矛盾。
+  const selInGroup = group.filter((i) => checked.has(i.id)).length;
+  cb.checked = group.length > 0 && selInGroup === group.length;
+  cb.indeterminate = selInGroup > 0 && selInGroup < group.length;
   head.append(makeCheckbox(cb));
 
   const icon = document.createElement('span');
@@ -532,6 +550,7 @@ function bindListEvents(): void {
       if (target.checked) checked.add(id);
       else checked.delete(id);
       target.closest('.item')?.classList.toggle('checked', target.checked);
+      popCheckbox(target);
       const source = items.find((i) => i.id === id)?.source;
       if (source) syncGroupCheckbox(source);
       refreshActions();
@@ -544,6 +563,7 @@ function bindListEvents(): void {
       const group = items.filter((i) => i.source === source);
       if (target.checked) group.forEach((i) => checked.add(i.id));
       else group.forEach((i) => checked.delete(i.id));
+      popCheckbox(target);
       syncItemsOfGroup(source);
       syncGroupCheckbox(source);
       refreshActions();
@@ -552,6 +572,9 @@ function bindListEvents(): void {
 }
 
 /* ============ 按钮状态 ============ */
+/** 上一次的选中计数，用于"计数变化时弹一下"（-1 = 尚未初始化，首帧不弹） */
+let lastSelCount = -1;
+
 function refreshActions() {
   const btnCheck = el<HTMLButtonElement>('btnCheck');
   const btnSel = el<HTMLButtonElement>('btnUpdateSelected');
@@ -564,6 +587,11 @@ function refreshActions() {
   btnSel.disabled = busy || selCount === 0;
   btnAll.disabled = busy || visible.length === 0;
   btnSel.textContent = `更新选中 · ${selCount}`;
+  // 选中数变化时弹一下，给"选中了几个"一个即时反馈
+  if (selCount !== lastSelCount) {
+    if (lastSelCount >= 0) pulse(btnSel, 'pulse-pop');
+    lastSelCount = selCount;
+  }
 
   el('checkSpinner').hidden = !busy;
   el('btnCheckLabel').textContent = busy ? '检查中' : '检查更新';
@@ -584,9 +612,14 @@ function onProgress(p: Progress) {
   if (p.status === 'done') {
     fill.style.width = '100%';
     text.textContent = `${p.total} / ${p.total}`;
+    // 走完时停掉呼吸、改播一次高亮收尾
+    fill.classList.remove('done');
+    void fill.offsetWidth;
+    fill.classList.add('done');
     return;
   }
 
+  fill.classList.remove('done');
   wrap.hidden = false;
   const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
   fill.style.width = `${pct}%`;
@@ -672,7 +705,9 @@ async function doUpdate(target: UpdateItem[]) {
     }
 
     el('statusLeft').textContent = '更新完成';
-    el('statusRight').textContent = `成功 ${ok} · 失败 ${bad}`;
+    const statusRight = el('statusRight');
+    statusRight.textContent = `成功 ${ok} · 失败 ${bad}`;
+    pulse(statusRight, 'pulse-pop'); // 结果数字弹一下，强化"完成了"的反馈
 
     // 通知：根据成功/失败送不同 level 的 toast
     const level = bad === 0 ? 'ok' : ok === 0 ? 'err' : 'warn';

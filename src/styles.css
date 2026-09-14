@@ -166,6 +166,70 @@ body.reduce-motion *::after {
   }
 }
 
+/* ---- 交互动画 ---- */
+/* 复选框：用户点选时的一次性反馈（由 JS 加 .box-pop，避免每次重渲染重播） */
+@keyframes boxPop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes checkPop {
+  0% {
+    opacity: 0;
+    transform: rotate(45deg) scale(0.2);
+  }
+  60% {
+    opacity: 1;
+    transform: rotate(45deg) scale(1.18);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(45deg) scale(1);
+  }
+}
+@keyframes dashIn {
+  from {
+    opacity: 0;
+    transform: scaleX(0.15);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+/* 数值/文本变化的"弹一下"，由 JS 加类触发 */
+@keyframes popPulse {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.16);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+/* 进度条走完时的一次呼吸 */
+@keyframes fillDone {
+  0%,
+  100% {
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+  50% {
+    box-shadow: 0 0 24px 3px var(--accent-glow);
+  }
+}
+
+.pulse-pop {
+  animation: popPulse 0.34s var(--ease);
+}
+
 /* ============ 根容器 ============ */
 .glass-root {
   height: 100vh;
@@ -235,11 +299,15 @@ body.reduce-motion *::after {
   border-radius: var(--radius-xs);
   color: var(--text-dim);
   cursor: pointer;
-  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease),
+    transform 0.1s var(--ease);
 }
 .tb-btn:hover {
   background: rgba(255, 255, 255, 0.09);
   color: var(--text);
+}
+.tb-btn:active {
+  transform: scale(0.9); /* 窗口按钮点下去的手感 */
 }
 .tb-btn.tb-close:hover {
   background: rgba(248, 113, 113, 0.18);
@@ -278,6 +346,15 @@ body.reduce-motion *::after {
   background: var(--bg-card);
   color: var(--text-faint);
   animation: cardIn 0.3s var(--ease) both;
+  /* 注意：.chip 自带 cardIn（fill: both），其 transform 会压过 :hover 的 transform，
+     所以悬停反馈只能用颜色/边框，不能用位移。 */
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease),
+    color 0.18s var(--ease);
+}
+.chip:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--line-strong);
+  color: var(--text-dim);
 }
 .chip.on {
   color: var(--ok);
@@ -316,6 +393,7 @@ body.reduce-motion *::after {
 }
 .btn:active:not(:disabled) {
   transform: translateY(1px) scale(0.97);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .btn:focus-visible {
   outline: none;
@@ -372,6 +450,10 @@ body.reduce-motion *::after {
   box-shadow: 0 0 12px var(--accent-glow);
   animation: barPulse 1.6s ease-in-out infinite;
   transition: width 0.3s var(--ease);
+}
+/* 进度走完的收尾：停掉呼吸、改播一次高亮（由 JS 在 status=done 时加类） */
+.progress-fill.done {
+  animation: fillDone 0.7s var(--ease);
 }
 .progress-text {
   flex: 0 0 auto;
@@ -584,14 +666,25 @@ body.reduce-motion *::after {
   display: inline-grid;
   place-items: center;
   color: var(--text-dim);
+  transition: transform 0.22s var(--ease), color 0.22s var(--ease);
 }
 .group-icon .ico {
   width: 15px;
   height: 15px;
 }
+/* 悬停分组时图标轻轻一挑，给出"可交互"的线索 */
+.group:hover .group-icon {
+  color: var(--accent);
+  transform: rotate(-6deg) scale(1.12);
+}
 .btn .ico {
   width: 13px;
   height: 13px;
+  transition: transform 0.18s var(--ease);
+}
+/* 按钮悬停时图标上浮一点（点击光环见 .btn:active） */
+.btn:hover:not(:disabled) .ico {
+  transform: translateY(-1px) scale(1.08);
 }
 
 .group {
@@ -622,6 +715,12 @@ body.reduce-motion *::after {
   padding: 1px 8px;
   border-radius: 999px;
   border: 1px solid var(--line);
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+/* 整组被选中时计数胶囊点亮为主题色（纯状态样式，不做动画 —— 否则每次重渲染都会重播） */
+.group:has(> .group-head input[data-role='group']:checked) .group-count {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .item {
@@ -715,7 +814,7 @@ body.reduce-motion *::after {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-dim);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s, color 0.12s, transform 0.12s var(--ease);
 }
 .item-action-btn:hover {
   background: rgba(255, 255, 255, 0.12);
@@ -725,9 +824,16 @@ body.reduce-motion *::after {
   background: rgba(248, 113, 113, 0.18);
   color: #f87171;
 }
+.item-action-btn:active {
+  transform: scale(0.88);
+}
 .item-action-btn .ico {
   width: 13px;
   height: 13px;
+  transition: transform 0.16s var(--ease);
+}
+.item-action-btn:hover .ico {
+  transform: scale(1.12);
 }
 
 /* 更新失败的「查看日志」入口：常驻可见，点击滚动日志面板并高亮 */
@@ -831,7 +937,8 @@ body.reduce-motion *::after {
   border-radius: calc(var(--radius-xs) + 1px);
   border: 1px solid var(--line-strong);
   background: rgba(0, 0, 0, 0.2);
-  transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+    transform 0.12s var(--ease);
 }
 .cb input:checked + .box {
   background: var(--accent);
@@ -852,6 +959,30 @@ body.reduce-motion *::after {
 .cb input:indeterminate + .box {
   background: color-mix(in srgb, var(--accent) 55%, transparent);
   border-color: var(--accent);
+}
+/* 半选态画一道横杠（此前只变底色，没有可辨识的标记） */
+.cb input:indeterminate + .box::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 7.6px;
+  width: 9px;
+  height: 1.8px;
+  border: none;
+  border-radius: 2px;
+  background: #0d1311;
+  transform: none;
+}
+/* 用户点选时的一次性反馈：方框微弹 + 勾/横杠弹入。
+   由 JS 加 .box-pop 触发 —— 直接绑在 :checked 上会在每次列表重渲染时通盘重播。 */
+.cb.box-pop .box {
+  animation: boxPop 0.26s var(--ease);
+}
+.cb.box-pop input:checked + .box::after {
+  animation: checkPop 0.24s var(--ease);
+}
+.cb.box-pop input:indeterminate + .box::after {
+  animation: dashIn 0.2s var(--ease);
 }
 
 /* ============ 状态栏 ============ */
@@ -1106,7 +1237,7 @@ input[type='color']:focus-visible {
   transition: transform 0.18s var(--ease), border-color 0.18s var(--ease);
 }
 .item:hover .item-icon {
-  transform: scale(1.05);
+  transform: scale(1.06) rotate(-2deg);
   border-color: var(--line-strong);
 }
 .item-icon img {
