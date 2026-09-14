@@ -1688,6 +1688,34 @@ input[type='color']:focus-visible {
 /* ============ 浅色模式适配 ============ */
 [data-theme='light'] {
   --toast-base: rgba(255, 255, 255, 0.82);
+  /* 浅色模式下玻璃偏亮、桌面底色不可控，文字改用「黑色描边」而不是投影：
+     八向极细描边能把字形轮廓钉住，在任意背景上都读得清。
+     （深色模式仍沿用深色投影，见上方 .tb-title… 那条 text-shadow 规则） */
+  --text-outline:
+    -1px -1px 0 rgba(0, 0, 0, 0.35),
+    0 -1px 0 rgba(0, 0, 0, 0.35),
+    1px -1px 0 rgba(0, 0, 0, 0.35),
+    -1px 0 0 rgba(0, 0, 0, 0.35),
+    1px 0 0 rgba(0, 0, 0, 0.35),
+    -1px 1px 0 rgba(0, 0, 0, 0.35),
+    0 1px 0 rgba(0, 0, 0, 0.35),
+    1px 1px 0 rgba(0, 0, 0, 0.35);
+}
+/* 浅色模式：把深色投影统一换成黑色描边 */
+[data-theme='light'] .tb-title,
+[data-theme='light'] .group-title,
+[data-theme='light'] .item-name,
+[data-theme='light'] .item-meta,
+[data-theme='light'] .log-text,
+[data-theme='light'] .log-time,
+[data-theme='light'] .chip,
+[data-theme='light'] .btn,
+[data-theme='light'] .progress-text,
+[data-theme='light'] .statusbar,
+[data-theme='light'] .preset-name,
+[data-theme='light'] .field-row label,
+[data-theme='light'] .empty-text {
+  text-shadow: var(--text-outline);
 }
 [data-theme='light'] .toast-close:hover {
   background: rgba(0, 0, 0, 0.08);
@@ -1748,22 +1776,11 @@ input[type='color']:focus-visible {
     transparent 100%
   );
 }
-[data-theme='light'] .toast-title {
-  text-shadow:
-    0 1px 2px rgba(255, 255, 255, 0.9),
-    0 0 4px rgba(255, 255, 255, 0.7),
-    0 0 8px rgba(255, 255, 255, 0.5);
-}
-[data-theme='light'] .toast-body {
-  text-shadow:
-    0 1px 2px rgba(255, 255, 255, 0.85),
-    0 0 4px rgba(255, 255, 255, 0.6),
-    0 0 8px rgba(255, 255, 255, 0.4);
-}
+/* 浅色模式下通知卡片同样是「浅底深字」，原来的白色泛光会把字形糊开 —— 一并改黑色描边 */
+[data-theme='light'] .toast-title,
+[data-theme='light'] .toast-body,
 [data-theme='light'] .toast-time {
-  text-shadow:
-    0 1px 2px rgba(255, 255, 255, 0.8),
-    0 0 4px rgba(255, 255, 255, 0.5);
+  text-shadow: var(--text-outline);
 }
 [data-theme='light'] .toast-close:hover {
   background: rgba(0, 0, 0, 0.08);

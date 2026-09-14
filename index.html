@@ -10,11 +10,11 @@
       <header class="titlebar" id="titlebar">
         <div class="tb-left">
           <span class="tb-dot"></span>
-          <span class="tb-title">系统一键更新</span>
-          <span class="tb-badge" id="adminBadge" hidden>管理员</span>
+          <span class="tb-title" data-i18n="app.title">系统一键更新</span>
+          <span class="tb-badge" id="adminBadge" data-i18n="app.admin" hidden>管理员</span>
         </div>
         <div class="tb-right">
-          <button class="tb-btn" id="btnSettings" title="设置">
+          <button class="tb-btn" id="btnSettings" data-i18n-title="btn.settings" title="设置">
             <svg viewBox="0 0 12 12">
               <circle cx="6" cy="6" r="1.9" />
               <path
@@ -22,13 +22,13 @@
               />
             </svg>
           </button>
-          <button class="tb-btn" id="btnMin" title="最小化">
+          <button class="tb-btn" id="btnMin" data-i18n-title="app.minimize" title="最小化">
             <svg viewBox="0 0 10 10"><path d="M1 5h8" /></svg>
           </button>
-          <button class="tb-btn" id="btnMax" title="最大化">
+          <button class="tb-btn" id="btnMax" data-i18n-title="app.maximize" title="最大化">
             <svg viewBox="0 0 10 10"><rect x="1.2" y="1.2" width="7.6" height="7.6" /></svg>
           </button>
-          <button class="tb-btn tb-close" id="btnClose" title="关闭">
+          <button class="tb-btn tb-close" id="btnClose" data-i18n-title="common.close" title="关闭">
             <svg viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" /></svg>
           </button>
         </div>
@@ -41,12 +41,12 @@
           <div class="toolbar-actions">
             <button class="btn" id="btnCheck">
               <span class="btn-spinner" id="checkSpinner" hidden></span>
-              <span id="btnCheckLabel">检查更新</span>
+              <span id="btnCheckLabel" data-i18n="btn.check">检查更新</span>
             </button>
-            <button class="btn btn-primary" id="btnUpdateSelected" disabled>
-              更新选中 · 0
+            <button class="btn btn-primary" id="btnUpdateSelected" data-i18n="btn.updateSelected" disabled>
+              更新选中
             </button>
-            <button class="btn btn-primary" id="btnUpdateAll" disabled>一键全部更新</button>
+            <button class="btn btn-primary" id="btnUpdateAll" data-i18n="btn.updateAll" disabled>一键全部更新</button>
           </div>
         </div>
 
@@ -61,21 +61,21 @@
             <div class="pane-empty" id="listEmpty">
               <div class="empty-inner">
                 <span class="empty-icon" id="emptyIcon"></span>
-                <span class="empty-text" id="emptyText">点击「检查更新」开始扫描</span>
+                <span class="empty-text" id="emptyText" data-i18n="empty.notScanned">点击「检查更新」开始扫描</span>
               </div>
             </div>
           </section>
           <aside class="log-pane">
             <div class="pane-head">
-              <span>运行日志</span>
-              <button class="mini-btn" id="btnClearLog">清空</button>
+              <span data-i18n="log.title">运行日志</span>
+              <button class="mini-btn" id="btnClearLog" data-i18n="btn.clearLog">清空</button>
             </div>
             <div class="log-body" id="logBody"></div>
           </aside>
         </div>
 
         <footer class="statusbar">
-          <span id="statusLeft">就绪</span>
+          <span id="statusLeft" data-i18n="status.idle">就绪</span>
           <span id="statusRight" class="stat-right"></span>
         </footer>
       </main>

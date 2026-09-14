@@ -17,6 +17,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { ICON } from './icons';
 import { applyTheme, loadTheme, type ThemeState } from './theme';
 import { applyFont, loadFont, watchFont } from './font-settings';
+import { t } from './i18n';
 
 // ============ 类型 ============
 
@@ -153,8 +154,8 @@ function buildToastEl(p: ToastPayload): HTMLElement {
   const closeBtn = document.createElement('button');
   closeBtn.className = 'toast-close';
   closeBtn.innerHTML = ICON.x;
-  closeBtn.title = '关闭';
-  closeBtn.setAttribute('aria-label', '关闭通知');
+  closeBtn.title = t('common.close');
+  closeBtn.setAttribute('aria-label', t('notify.closeAria'));
 
   head.append(title, time, closeBtn);
 

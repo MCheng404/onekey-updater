@@ -13,6 +13,7 @@ import {
   isItemIgnored,
   loadSettings,
 } from './app-settings';
+import { applyI18n, t, watchLang } from './i18n';
 
 type SourceKind = 'npm' | 'winget' | 'pip' | 'openclaw';
 
@@ -56,12 +57,10 @@ interface ItemResult {
   ok: boolean;
 }
 
-const SOURCE_LABEL: Record<SourceKind, string> = {
-  npm: 'npm 全局包',
-  winget: 'winget 软件',
-  pip: 'pip 包',
-  openclaw: 'OpenClaw',
-};
+/** 分组标题。随语言变化，所以每次现算，不能做成静态常量 */
+function sourceLabel(kind: SourceKind): string {
+  return t(`group.${kind}`);
+}
 const SOURCE_ORDER: SourceKind[] = ['npm', 'winget', 'pip', 'openclaw'];
 const MAX_LOG_LINES = 800;
 
@@ -81,6 +80,8 @@ let scanned = false;
 let ignoredCount = 0;
 /** 上一次更新失败的项 id，用于在列表里给出「查看日志」入口 */
 let failedIds = new Set<string>();
+/** 上一次扫描更新的错误信息；非空时列表显示错误空状态（而不是谎报"全部最新"） */
+let lastCheckError: string | null = null;
 
 /**
  * 当前"未被忽略"的项 —— 也就是列表里真正显示出来的那些。
@@ -108,6 +109,30 @@ let theme: ThemeState = loadTheme();
 let appSettings: AppSettings = loadSettings();
 /** 是否为开机自启动模式（--autostart 参数） */
 let isAutostart = false;
+
+/* 状态栏内容以 key + 插值保存，语言切换时可原样重建 */
+let statusLeftKey = 'status.idle';
+let statusLeftVars: Record<string, string | number> | undefined;
+let statusRightKey: string | null = null;
+let statusRightVars: Record<string, string | number> | undefined;
+
+function setStatusLeft(key: string, vars?: Record<string, string | number>): void {
+  statusLeftKey = key;
+  statusLeftVars = vars;
+  el('statusLeft').textContent = t(key, vars);
+}
+
+function setStatusRight(key: string | null, vars?: Record<string, string | number>): void {
+  statusRightKey = key;
+  statusRightVars = vars;
+  el('statusRight').textContent = key ? t(key, vars) : '';
+}
+
+/** 按当前语言重建状态栏（语言切换时用） */
+function renderStatus(): void {
+  el('statusLeft').textContent = t(statusLeftKey, statusLeftVars);
+  el('statusRight').textContent = statusRightKey ? t(statusRightKey, statusRightVars) : '';
+}
 
 function el<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -206,7 +231,11 @@ function jumpToLog(): void {
 }
 
 /* ============ 环境状态 ============ */
+/** 最近一次环境探测结果，语言切换时需要原样重放 */
+let lastEnv: EnvStatus | null = null;
+
 function renderEnv(env: EnvStatus) {
+  lastEnv = env;
   const box = el('envChips');
   box.replaceChildren();
 
@@ -220,7 +249,7 @@ function renderEnv(env: EnvStatus) {
   for (const [name, ok] of pairs) {
     const chip = document.createElement('span');
     chip.className = `chip ${ok ? 'on' : 'off'}`;
-    chip.textContent = `${name} ${ok ? '已就绪' : '缺失'}`;
+    chip.textContent = t(ok ? 'env.ready' : 'env.missing', { name });
     box.append(chip);
   }
 
@@ -231,14 +260,20 @@ function renderEnv(env: EnvStatus) {
 
 /**
  * 显示列表空状态：主题色图标 + 一句说明。
- * spin=true 时图标改为自转，用于"扫描中"这类进行态。
+ * 传 i18n key 而非成品文本 —— 语言切换时 renderList 会按当前状态重建。
+ * @param spin true 时图标自转，用于"扫描中"这类进行态
  */
-function showEmpty(text: string, icon: string, spin = false): void {
+function showEmpty(
+  key: string,
+  icon: string,
+  vars?: Record<string, string | number>,
+  spin = false,
+): void {
   el('listEmpty').hidden = false;
   const iconEl = el('emptyIcon');
   iconEl.innerHTML = icon;
   iconEl.classList.toggle('spin', spin);
-  el('emptyText').textContent = text;
+  el('emptyText').textContent = t(key, vars);
 }
 
 /**
@@ -257,10 +292,19 @@ function renderList(animate = false) {
     // 扫描中必须与"全部最新"区分开：之前 items 被清空但 scanned 仍为 true，
     // 结果扫描过程中会误导性地显示"所有软件都是最新版本"。
     if (busy) {
-      showEmpty('正在扫描可更新项…', ICON.refresh, true);
+      showEmpty('empty.scanning', ICON.refresh, undefined, true);
     } else {
-      showEmpty('点击「检查更新」开始扫描', ICON.search);
+      showEmpty('empty.notScanned', ICON.search);
     }
+    return;
+  }
+
+  // 上一次扫描失败：给明确错误态，别让空列表谎报"全部最新"。
+  // 放在这里（而不是只在 catch 里直接渲染），语言切换重渲染也能保持正确。
+  if (lastCheckError) {
+    showEmpty('status.checkFailedDetail', ICON.alert, {
+      error: lastCheckError.slice(0, 90),
+    });
     return;
   }
 
@@ -270,12 +314,9 @@ function renderList(animate = false) {
 
   if (visible.length === 0) {
     if (items.length === 0) {
-      showEmpty('所有软件都是最新版本', ICON.checkCircle);
+      showEmpty('empty.allLatest', ICON.checkCircle);
     } else {
-      showEmpty(
-        `全部 ${items.length} 项已被忽略，可在设置中管理`,
-        ICON.eyeOffBig
-      );
+      showEmpty('empty.allIgnored', ICON.eyeOffBig, { count: items.length });
     }
     return;
   }
@@ -331,7 +372,7 @@ function buildGroup(
 
   const title = document.createElement('span');
   title.className = 'group-title';
-  title.textContent = SOURCE_LABEL[source];
+  title.textContent = sourceLabel(source);
 
   const count = document.createElement('span');
   count.className = 'group-count';
@@ -399,7 +440,7 @@ function buildItem(item: UpdateItem): HTMLElement {
 
   const meta = document.createElement('div');
   meta.className = 'item-meta';
-  meta.textContent = item.pkgId ?? SOURCE_LABEL[item.source];
+  meta.textContent = item.pkgId ?? sourceLabel(item.source);
 
   main.append(name, meta);
 
@@ -433,7 +474,7 @@ function buildItem(item: UpdateItem): HTMLElement {
 
   const btnIgnoreVer = document.createElement('button');
   btnIgnoreVer.className = 'item-action-btn';
-  btnIgnoreVer.title = '忽略此版本（版本更新后自动恢复）';
+  btnIgnoreVer.title = t('action.ignoreVersion');
   btnIgnoreVer.innerHTML = ICON.eyeOff;
   btnIgnoreVer.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -445,7 +486,7 @@ function buildItem(item: UpdateItem): HTMLElement {
 
   const btnIgnoreForever = document.createElement('button');
   btnIgnoreForever.className = 'item-action-btn danger';
-  btnIgnoreForever.title = '永久忽略（可在设置中移除）';
+  btnIgnoreForever.title = t('action.ignoreForever');
   btnIgnoreForever.innerHTML = ICON.ban;
   btnIgnoreForever.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -464,8 +505,8 @@ function buildItem(item: UpdateItem): HTMLElement {
     const failBtn = document.createElement('button');
     failBtn.className = 'item-fail';
     failBtn.type = 'button';
-    failBtn.title = '更新失败，点击查看运行日志';
-    failBtn.innerHTML = `${ICON.alert}<span>查看日志</span>`;
+    failBtn.title = t('action.failedViewLog');
+    failBtn.innerHTML = `${ICON.alert}<span>${t('btn.viewLog')}</span>`;
     failBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       jumpToLog();
@@ -586,7 +627,7 @@ function refreshActions() {
   const selCount = visible.filter((i) => checked.has(i.id)).length;
   btnSel.disabled = busy || selCount === 0;
   btnAll.disabled = busy || visible.length === 0;
-  btnSel.textContent = `更新选中 · ${selCount}`;
+  btnSel.textContent = t('btn.updateSelectedCount', { count: selCount });
   // 选中数变化时弹一下，给"选中了几个"一个即时反馈
   if (selCount !== lastSelCount) {
     if (lastSelCount >= 0) pulse(btnSel, 'pulse-pop');
@@ -594,7 +635,7 @@ function refreshActions() {
   }
 
   el('checkSpinner').hidden = !busy;
-  el('btnCheckLabel').textContent = busy ? '检查中' : '检查更新';
+  el('btnCheckLabel').textContent = busy ? t('btn.checking') : t('btn.check');
 }
 
 function setBusy(value: boolean) {
@@ -630,12 +671,13 @@ function onProgress(p: Progress) {
 async function doCheck() {
   if (busy) return;
   setBusy(true);
-  el('statusLeft').textContent = '正在检查更新…';
-  el('statusRight').textContent = '';
+  setStatusLeft('status.checking');
+  setStatusRight(null);
 
   items = [];
   checked = new Set<string>();
   failedIds = new Set<string>();
+  lastCheckError = null;
   scanned = false; // 进入"扫描中"空状态
   renderList();
 
@@ -651,8 +693,11 @@ async function doCheck() {
     );
     scanned = true;
     renderList(true); // 新一次扫描完成 —— 播放入场动画
-    el('statusLeft').textContent = `检查完成 · 共 ${items.length} 项可更新`;
-    el('statusRight').textContent = ignoredCount > 0 ? `已忽略 ${ignoredCount} 项` : '';
+    setStatusLeft('status.checkDone', { count: items.length });
+    setStatusRight(
+      ignoredCount > 0 ? 'status.ignoredCount' : null,
+      ignoredCount > 0 ? { count: ignoredCount } : undefined,
+    );
 
     // 异步拉取应用图标（首次会触发 PowerShell 扫描注册表，5~10s）
     try {
@@ -664,16 +709,16 @@ async function doCheck() {
         patchIcons(icons); // 就地替换图标，不整表重建
       }
     } catch (e) {
-      el('statusRight').textContent = `图标加载失败：${String(e).slice(0, 40)}`;
+      setStatusRight('status.iconFailed', { error: String(e).slice(0, 40) });
     }
   } catch (e) {
     // 检查失败时给明确的错误态，而不是让空列表谎报"全部最新"
     scanned = true;
     items = [];
     checked = new Set<string>();
-    el('listScroll').replaceChildren();
-    showEmpty(`检查失败：${String(e).slice(0, 90)}`, ICON.alert);
-    el('statusLeft').textContent = '检查失败';
+    lastCheckError = String(e);
+    renderList(); // 由 renderList 统一渲染错误空状态（语言切换时也能重建）
+    setStatusLeft('status.checkFailed');
     refreshActions();
   } finally {
     setBusy(false);
@@ -683,8 +728,8 @@ async function doCheck() {
 async function doUpdate(target: UpdateItem[]) {
   if (busy || target.length === 0) return;
   setBusy(true);
-  el('statusLeft').textContent = `正在更新 ${target.length} 项…`;
-  el('statusRight').textContent = '';
+  setStatusLeft('status.updatingCount', { count: target.length });
+  setStatusRight(null);
 
   try {
     const results = await invoke<ItemResult[]>('start_update', { items: target });
@@ -704,22 +749,21 @@ async function doUpdate(target: UpdateItem[]) {
       refreshActions();
     }
 
-    el('statusLeft').textContent = '更新完成';
-    const statusRight = el('statusRight');
-    statusRight.textContent = `成功 ${ok} · 失败 ${bad}`;
-    pulse(statusRight, 'pulse-pop'); // 结果数字弹一下，强化"完成了"的反馈
+    setStatusLeft('status.updateDone');
+    setStatusRight('status.updateResult', { ok, failed: bad });
+    pulse(el('statusRight'), 'pulse-pop'); // 结果数字弹一下，强化"完成了"的反馈
 
     // 通知：根据成功/失败送不同 level 的 toast
     const level = bad === 0 ? 'ok' : ok === 0 ? 'err' : 'warn';
     void invoke('send_notification', {
-      title: '更新完成',
-      body: `${ok} 项成功 · ${bad} 项失败`,
+      title: t('notify.updateComplete'),
+      body: t('notify.updateResult', { ok, failed: bad }),
       level,
     }).catch(() => undefined);
   } catch (e) {
-    el('statusLeft').textContent = `更新失败：${String(e)}`;
+    setStatusLeft('status.updateFailed', { error: String(e) });
     void invoke('send_notification', {
-      title: '更新失败',
+      title: t('notify.updateFailed'),
       body: String(e).slice(0, 80),
       level: 'err',
     }).catch(() => undefined);
@@ -837,7 +881,7 @@ async function init() {
   try {
     el('btnSettings').addEventListener('click', () => {
       void invoke('open_settings').catch((e) => {
-        el('statusLeft').textContent = `无法打开设置：${String(e)}`;
+        setStatusLeft('status.openSettingsFailed', { error: String(e) });
       });
     });
   } catch (e) {
@@ -883,6 +927,23 @@ async function init() {
     watchFont((f) => applyFont(f));
   } catch (e) {
     console.warn('[init] 字体应用失败', e);
+  }
+
+  /* 6.6 多语言：先套用静态文案，之后语言一变就重建所有动态内容
+   * （只重跑 applyI18n 不够：列表、状态栏、chips 都是 JS 生成的一次性文本） */
+  try {
+    document.title = t('app.title');
+    applyI18n();
+    watchLang(() => {
+      document.title = t('app.title');
+      applyI18n();
+      if (lastEnv) renderEnv(lastEnv);
+      renderList();
+      refreshActions();
+      renderStatus();
+    });
+  } catch (e) {
+    console.warn('[init] 多语言初始化失败', e);
   }
 
   /* 7. 图标注入与距离感应放大 */
@@ -990,8 +1051,8 @@ async function autostartCheck() {
         await appWindow.setFocus();
       }
       void invoke('send_notification', {
-        title: '发现可更新项',
-        body: `共 ${items.length} 项可更新，点击查看详情`,
+        title: t('notify.foundTitle'),
+        body: t('notify.foundBody', { count: items.length }),
         level: 'info',
       }).catch(() => undefined);
     } else {

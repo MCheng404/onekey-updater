@@ -10,7 +10,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
 import { applyTheme, loadTheme } from './theme';
 import { applyFont, loadFont, watchFont } from './font-settings';
-import { t, getLang, watchLang } from './i18n';
+import { applyI18n as applyI18nShared, t, getLang, watchLang } from './i18n';
 
 // GitHub 配置
 const GITHUB_PROFILE = 'https://github.com/MCheng404';
@@ -25,13 +25,10 @@ function el<T extends HTMLElement = HTMLElement>(id: string): T {
   return e as T;
 }
 
-/** 应用 i18n 文本到所有 data-i18n 元素 */
+/** 应用当前语言到关于窗口：共享 applyI18n（含 title/aria）+ 窗口标题 */
 function applyI18n(): void {
-  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach((node) => {
-    const key = node.dataset.i18n;
-    if (key) node.textContent = t(key);
-  });
   document.title = t('about.title');
+  applyI18nShared();
 }
 
 /** 检查 GitHub 最新版本 */

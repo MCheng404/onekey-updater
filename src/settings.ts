@@ -23,7 +23,7 @@ import {
   removeFromIgnore,
   saveSettings,
 } from './app-settings';
-import { t, setLang, getLang, watchLang, type Lang } from './i18n';
+import { applyI18n, t, setLang, getLang, watchLang, type Lang } from './i18n';
 import {
   DEFAULT_FONT,
   applyFont,
@@ -55,32 +55,19 @@ let notify: NotifyPrefs = { ...DEFAULT_NOTIFY };
 let appSettings: AppSettings = loadSettings();
 let fontSettings: FontSettings = loadFont();
 
-const POS_LABELS: Record<string, { label: string; hint: string }> = {
-  'top-left': {
-    label: '左上',
-    hint: '左上：适合作为信息提示流，新通知从顶部向下依次堆叠，眼睛先看到最新一条。',
-  },
-  'top-center': {
-    label: '顶部居中',
-    hint: '顶部居中：适合中等优先级的提示，视线从屏幕中央向下扫读，左右对称。',
-  },
-  'top-right': {
-    label: '右上',
-    hint: '右上：与 macOS 通知中心一致，新通知顶部对齐，先看最新消息。',
-  },
-  'bottom-left': {
-    label: '左下',
-    hint: '左下：左侧靠下适合"非打扰型"提示，新通知向上叠，旧的下沉远离视线。',
-  },
-  'bottom-center': {
-    label: '底部居中',
-    hint: '底部居中：更新进度类通知常用，从下往上依次累加，旧消息保持可见。',
-  },
-  'bottom-right': {
-    label: '右下',
-    hint: '右下：人眼最常见的视线落点，新通知从底部滑入，与系统通知中心一致。',
-  },
+/** 通知位置 → i18n key 片段（真实文案在语言包里，随语言变化，所以不能做成静态常量） */
+const POS_KEY: Record<string, string> = {
+  'top-left': 'topLeft',
+  'top-center': 'topCenter',
+  'top-right': 'topRight',
+  'bottom-left': 'bottomLeft',
+  'bottom-center': 'bottomCenter',
+  'bottom-right': 'bottomRight',
 };
+
+function posHint(pos: string): string {
+  return t(`settings.pos.${POS_KEY[pos] ?? 'bottomRight'}Hint`);
+}
 
 function el<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -135,7 +122,7 @@ function renderPresets(): void {
 
     const name = document.createElement('div');
     name.className = 'preset-name';
-    name.textContent = p.name;
+    name.textContent = t(`settings.preset.${p.id}`);
 
     btn.append(swatch, name);
     btn.addEventListener('click', () => {
@@ -288,13 +275,20 @@ function bindLanguage(): void {
   }
 }
 
-/** 应用 i18n 文本到设置面板（关键元素） */
+/**
+ * 把当前语言应用到整个设置面板。
+ * 静态文案交给 applyI18n；预设名 / 通知位置提示 / 忽略列表是 JS 生成的，
+ * 必须一并重建，否则切语言后它们还停留在旧语言。
+ */
 function applyI18nTexts(): void {
   try {
     document.documentElement.setAttribute('lang', getLang());
     document.title = t('settings.title');
-    const tbTitle = document.querySelector('.tb-title');
-    if (tbTitle) tbTitle.textContent = t('settings.title');
+    applyI18n();
+    renderPresets();
+    syncThemeControls();
+    syncNotifyControls();
+    renderIgnoreList();
   } catch {
     /* ignore */
   }
@@ -312,7 +306,7 @@ function syncFontControls(): void {
   el<HTMLInputElement>('rangeFontScale').value = String(Math.round(fontSettings.scale * 100));
   el('valFontScale').textContent = `${Math.round(fontSettings.scale * 100)}%`;
 
-  el('fontFilePath').textContent = fontSettings.customPath || '未选择字体文件';
+  el('fontFilePath').textContent = fontSettings.customPath || t('settings.noFontFile');
   const dirSel = el<HTMLSelectElement>('selectDirFont');
   el('rowFontDirList').hidden = dirSel.options.length === 0;
 
@@ -332,7 +326,7 @@ function setFontSource(src: FontSource): void {
 
 async function loadSystemFonts(): Promise<void> {
   const sel = el<HTMLSelectElement>('selectSystemFont');
-  sel.innerHTML = '<option value="">读取中…</option>';
+  sel.innerHTML = `<option value="">${t('common.loading')}</option>`;
 
   let fonts: string[] = [];
   try {
@@ -342,7 +336,7 @@ async function loadSystemFonts(): Promise<void> {
   }
 
   if (fonts.length === 0) {
-    sel.innerHTML = '<option value="">（未读取到系统字体）</option>';
+    sel.innerHTML = `<option value="">${t('settings.noSystemFont')}</option>`;
     return;
   }
 
@@ -405,7 +399,7 @@ function bindFontControls(): void {
       sel.replaceChildren();
 
       if (files.length === 0) {
-        el('fontFilePath').textContent = `该文件夹里没有字体文件：${dir}`;
+        el('fontFilePath').textContent = t('settings.noFontInDir', { dir });
         syncFontControls();
         return;
       }
@@ -493,9 +487,10 @@ function syncNotifyControls(): void {
     r.checked = r.value === notify.mode;
   });
   const mini = el<HTMLDivElement>('posMini');
+  const posKey = POS_KEY[notify.position] ?? 'bottomRight';
   mini.dataset.pos = notify.position;
-  const info = POS_LABELS[notify.position];
-  el('posHint').textContent = info?.hint ?? '';
+  mini.title = t(`settings.pos.${posKey}`); // 迷你示意图的悬停提示 = 当前位置名
+  el('posHint').textContent = posHint(notify.position);
 
   el<HTMLInputElement>('rangeNotifDuration').value = String(notify.durationMs);
   el<HTMLInputElement>('rangeNotifOpacity').value = String(notify.opacity);
@@ -561,8 +556,8 @@ function bindNotifyControls(): void {
 
   el('btnTestNotif').addEventListener('click', () => {
     void invoke('send_notification', {
-      title: notify.mode === 'native' ? '系统通知测试' : '应用内通知测试',
-      body: '这是一条测试消息，用于确认通知位置与样式。',
+      title: notify.mode === 'native' ? t('settings.testNotifNative') : t('settings.testNotifApp'),
+      body: t('settings.testNotifBody'),
       level: 'info',
     }).catch(() => undefined);
   });
@@ -572,12 +567,12 @@ function bindNotifyControls(): void {
 function bindIconControls(): void {
   el('btnRefreshIcons').addEventListener('click', async () => {
     const stat = el('iconStat');
-    stat.textContent = '刷新中…';
+    stat.textContent = t('settings.refreshing');
     try {
       const entries = await invoke<Array<{ name: string; icon: string }>>('rebuild_icon_cache');
-      stat.textContent = `已缓存 ${entries.length} 个图标`;
+      stat.textContent = t('settings.iconCached', { count: entries.length });
     } catch (e) {
-      stat.textContent = `刷新失败：${String(e).slice(0, 40)}`;
+      stat.textContent = t('settings.iconFailed', { error: String(e).slice(0, 40) });
     }
   });
 }
@@ -626,7 +621,7 @@ function renderIgnoreList(): void {
     const container = el('ignoreList');
     const ignored = listIgnored(appSettings);
     if (ignored.length === 0) {
-      container.innerHTML = '<div class="ignore-empty">暂无被忽略的更新项</div>';
+      container.innerHTML = `<div class="ignore-empty">${t('settings.ignoreEmpty')}</div>`;
       return;
     }
     container.replaceChildren();
@@ -641,12 +636,15 @@ function renderIgnoreList(): void {
       name.textContent = item.id;
       const kind = document.createElement('span');
       kind.className = 'ignore-kind';
-      kind.textContent = item.kind === 'version' ? `忽略版本 ${item.version ?? ''}` : '永久忽略';
+      kind.textContent =
+        item.kind === 'version'
+          ? t('settings.ignoreVersionLabel', { version: item.version ?? '' })
+          : t('settings.ignoreForeverLabel');
       info.append(name, kind);
 
       const btn = document.createElement('button');
       btn.className = 'mini-btn';
-      btn.textContent = '移除';
+      btn.textContent = t('common.remove');
       btn.addEventListener('click', () => {
         appSettings = removeFromIgnore(item.id, appSettings);
         renderIgnoreList();
