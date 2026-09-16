@@ -36,11 +36,16 @@
   --font-en: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
 
+  /* 通知卡片阴影：由这一对变量统一供给，深浅色各一套。
+     原来那 4~5 层暗色 inset 叠起来会把卡片糊成一块黑底，且完全不跟随主题。 */
+  --toast-shadow: 0 12px 32px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --toast-shadow-hover: 0 16px 40px rgba(0, 0, 0, 0.48), 0 4px 12px rgba(0, 0, 0, 0.26);
+  /* 旧的 --toast-base 已删除：定义了深/浅两份，但没有任何规则引用它（死代码）。
   /* Toast 卡片底色。
      通知窗口是**纯透明**的：既不能设 backgroundColor（会渲染成不透明白/黑底），
      也不能开 acrylic（材质铺满整个窗口矩形，比卡片宽就在左右各露一条）。
      所以卡片必须自己撑起可读性 —— 用半透明玻璃色，别用深色实心底。 */
-  --toast-base: rgba(30, 34, 43, 0.55);
+
 
   /* 字号缩放：由字体设置写入，1 = 标准。所有文字尺寸都乘以它。
      基线比旧版整体放大约 8%，并把原先散落的 10 个字号值收敛成 9 个层级。 */
@@ -1334,14 +1339,7 @@ html[data-text-render='none'] .toast-time {
   border-radius: var(--radius);
   background: var(--bg-card);
   border: 1px solid var(--line-strong);
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.45),
-    0 2px 8px rgba(0, 0, 0, 0.2),
-    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-    /* 内阴影只留一点点：之前 0.35/0.2 的黑色内阴影 + 深底色叠加起来，
-       整块卡片会糊成"一层黑色背景"。文字对比交给 text-shadow 处理。 */
-    inset 0 0 26px rgba(0, 0, 0, 0.16),
-    inset 0 1px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--toast-shadow);
   overflow: hidden;
   cursor: pointer;
   animation: toastIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -1351,14 +1349,12 @@ html[data-text-render='none'] .toast-time {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
+/* ⚠️ 这里**绝对不能**再写 transform —— `.toast:hover`（0,2,0）会压过 `.toast`（0,1,0），
+   而指针只要在卡片上就永远是 hover 状态，于是拖拽位移被整段覆盖、表现为"怎么都拖不动"。
+   悬停的抬升改为只提供一个变量，由基础规则的 transform 统一合成。 */
 .toast:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.5),
-    0 4px 12px rgba(0, 0, 0, 0.25),
-    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
-    inset 0 0 36px rgba(0, 0, 0, 0.4),
-    inset 0 2px 8px rgba(0, 0, 0, 0.25);
+  --toast-hover-y: -2px;
+  box-shadow: var(--toast-shadow-hover);
 }
 .toast.toast-out {
   animation: toastOut 0.28s var(--ease) both;
@@ -1390,8 +1386,11 @@ html[data-text-render='none'] .toast-time {
 /* ---------- 按下 / 拖拽关闭 ---------- */
 /* ⚠️ 入场动画 toastIn 是 `animation: … both`，终态的 `transform: none` 会盖掉下面
    这些 transform —— 表现为"完全拖不动"。所以凡是改 transform 的状态都必须 animation: none。 */
+/* 位移、悬停抬升、按下缩放、拖拽缩放**全部在这里合成一个 transform**。
+   以前 hover 自己写 transform，而指针在卡片上时永远是 hover —— 拖拽被完全覆盖。 */
 .toast {
-  transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(var(--toast-scale, 1));
+  transform: translate(var(--dx, 0px), calc(var(--dy, 0px) + var(--toast-hover-y, 0px)))
+    scale(var(--toast-scale, 1));
   transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s var(--ease);
 }
 /* 按下：Q 弹变小（曲线末尾的那点过冲就是"Q 弹"的来源） */
@@ -1737,7 +1736,8 @@ html[data-text-render='none'] .toast-time {
 
 /* ============ 浅色模式适配 ============ */
 [data-theme='light'] {
-  --toast-base: rgba(255, 255, 255, 0.82);
+  --toast-shadow: 0 10px 26px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.08);
+  --toast-shadow-hover: 0 14px 34px rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.1);
   /* 文字渲染（描边/投影/强度）已挪到上方统一的「文字渲染」一节，
      由 <html data-text-render> + JS 算出的两个变量驱动，这里不再逐个元素覆盖。 */
 }
@@ -1782,21 +1782,6 @@ html[data-text-render='none'] .toast-time {
 [data-theme='light'] .badge {
   background: rgba(0, 0, 0, 0.06);
   color: var(--text-dim);
-}
-[data-theme='light'] .toast {
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.15),
-    0 2px 8px rgba(0, 0, 0, 0.08),
-    0 0 0 1px rgba(0, 0, 0, 0.06) inset;
-    /* 这里原本还有两道白色内发光（inset 0 0 32px rgba(255,255,255,.5) 等）——
-       是"光泽"效果，既违背纯平约定、也没带来可读性（对比已由文字渲染设置负责）。 */
-}
-[data-theme='light'] .toast:hover {
-  box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.2),
-    0 4px 12px rgba(0, 0, 0, 0.1),
-    0 0 0 1px rgba(0, 0, 0, 0.08) inset;
-    /* hover 也别加光泽：悬停只加深投影，保持纯平 */
 }
 /* 深色模式下 .toast-main 本来就没有底色（见上方注释：渐变违背纯平要求）。
    浅色这里原本补了个 90° 白色渐变蒙层，属于同一类"渐变" —— 改成纯平的一层薄白。 */
