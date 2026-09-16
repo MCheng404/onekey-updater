@@ -4,7 +4,7 @@
 [![GitHub license](https://img.shields.io/github/license/MCheng404/onekey-updater)](https://github.com/MCheng404/onekey-updater/blob/main/LICENSE)
 [![GitHub downloads](https://img.shields.io/github/downloads/MCheng404/onekey-updater/total)](https://github.com/MCheng404/onekey-updater/releases)
 
-**简体中文 | [English](README.md)**
+**简体中文 | [繁體中文](README.zh-TW.md) | [English](README.md)**
 
 统一管理 npm / winget / pip / OpenClaw 四源软件更新的桌面工具，基于 Tauri 2 + Rust + TypeScript 构建。轻量、快速、无感。
 

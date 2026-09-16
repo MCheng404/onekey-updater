@@ -4,7 +4,7 @@
 [![GitHub license](https://img.shields.io/github/license/MCheng404/onekey-updater)](https://github.com/MCheng404/onekey-updater/blob/main/LICENSE)
 [![GitHub downloads](https://img.shields.io/github/downloads/MCheng404/onekey-updater/total)](https://github.com/MCheng404/onekey-updater/releases)
 
-**[简体中文](README.zh-CN.md) | English**
+**[简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | English**
 
 A desktop tool for unified software updates across npm, winget, pip, and OpenClaw. Built with Tauri 2 + Rust + TypeScript. Lightweight, fast, and seamless.
 
