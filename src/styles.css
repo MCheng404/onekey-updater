@@ -1208,7 +1208,6 @@ input[type='range'] {
 .mode-btn:focus-visible,
 .preset:focus-visible,
 .item-action-btn:focus-visible,
-.toast-close:focus-visible,
 .select-input:focus-visible,
 .pos-mini:focus-visible,
 input[type='range']:focus-visible,
@@ -1295,22 +1294,35 @@ html[data-text-render='none'] .toast-time {
   pointer-events: none;
   /* 由 .dir-* 决定列方向；由 .align-* 决定水平对齐 */
 }
+/* 入场/退场位移跟随通知位置。
+   原来入场固定 translateY(+16px)、退场固定 translateX(+24px) —— 于是放在
+   "左上"的通知会从下方往上冒、放在"左下"的会向右横着飘走，方向全是反的。
+   现在由位置推出位移量：每条通知都从它自己那一角进出。 */
+.toast-root {
+  --toast-in-x: 0px;
+  --toast-in-y: 16px;
+}
 .toast-root.dir-top-down {
   flex-direction: column;
   justify-content: flex-start;
+  --toast-in-y: -16px;
 }
 .toast-root.dir-bottom-up {
   flex-direction: column-reverse;
   justify-content: flex-end;
+  --toast-in-y: 16px;
 }
 .toast-root.align-left {
   align-items: flex-start;
+  --toast-in-x: -12px;
 }
 .toast-root.align-right {
   align-items: flex-end;
+  --toast-in-x: 12px;
 }
 .toast-root.align-center {
   align-items: center;
+  --toast-in-x: 0px;
 }
 
 .toast {
@@ -1355,7 +1367,8 @@ html[data-text-render='none'] .toast-time {
 @keyframes toastIn {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.95);
+    /* 位移量由 .toast-root 上的位置类给出（见上） */
+    transform: translate(var(--toast-in-x, 0px), var(--toast-in-y, 16px)) scale(0.95);
   }
   to {
     opacity: var(--notif-opacity, 1);
@@ -1369,7 +1382,8 @@ html[data-text-render='none'] .toast-time {
   }
   to {
     opacity: 0;
-    transform: translateX(24px) scale(0.96);
+    /* 原路退回：进来时怎么来的，出去就怎么走 */
+    transform: translate(var(--toast-in-x, 0px), var(--toast-in-y, 16px)) scale(0.96);
   }
 }
 
@@ -1421,27 +1435,8 @@ html[data-text-render='none'] .toast-time {
     0 1px 2px rgba(0, 0, 0, 0.8),
     0 0 4px rgba(0, 0, 0, 0.5);
 }
-.toast-close {
-  flex: 0 0 18px;
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--text-faint);
-  border-radius: var(--radius-xs);
-  transition: background 0.15s var(--ease), color 0.15s var(--ease);
-}
-.toast-close:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--text);
-}
-.toast-close .ico {
-  width: 10px;
-  height: 10px;
-}
+/* .toast-close 的样式已随关闭按钮一并移除：整张卡片就是关闭热区（见 notify.ts）。
+   留着只会是永远匹配不到元素的死代码。 */
 .toast-body {
   font-size: var(--t-6);
   line-height: 1.6;
@@ -1721,9 +1716,6 @@ html[data-text-render='none'] .toast-time {
   /* 文字渲染（描边/投影/强度）已挪到上方统一的「文字渲染」一节，
      由 <html data-text-render> + JS 算出的两个变量驱动，这里不再逐个元素覆盖。 */
 }
-[data-theme='light'] .toast-close:hover {
-  background: rgba(0, 0, 0, 0.08);
-}
 [data-theme='light'] .item-action-btn {
   background: rgba(0, 0, 0, 0.04);
 }
@@ -1794,9 +1786,6 @@ html[data-text-render='none'] .toast-time {
 [data-theme='light'] .toast-body,
 [data-theme='light'] .toast-time {
   text-shadow: var(--text-render, none);
-}
-[data-theme='light'] .toast-close:hover {
-  background: rgba(0, 0, 0, 0.08);
 }
 
 /* ============ 语言选择下拉框 ============ */

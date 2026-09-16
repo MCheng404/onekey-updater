@@ -74,9 +74,9 @@ const zhCN: Record<string, string> = {
   'action.selectAllIn': '全选 {group}',
 
   // ---- 通知窗口 ----
-  'notify.closeAria': '关闭通知',
   'notify.foundTitle': '发现可更新项',
-  'notify.foundBody': '共 {count} 项可更新，点击查看详情',
+  'notify.foundBody': '共 {count} 项可更新，点通知即可关闭',
+  'notify.dismissAria': '关闭通知：{title}',
   'notify.updateComplete': '更新完成',
   'notify.updateFailed': '更新失败',
   'notify.updateResult': '{ok} 项成功 · {failed} 项失败',
@@ -258,9 +258,9 @@ const enUS: Record<string, string> = {
   'action.selectAllIn': 'Select all {group}',
 
   // ---- Notification window ----
-  'notify.closeAria': 'Dismiss notification',
   'notify.foundTitle': 'Updates available',
-  'notify.foundBody': '{count} update(s) available — click for details',
+  'notify.foundBody': '{count} update(s) available — click the notification to dismiss',
+  'notify.dismissAria': 'Dismiss notification: {title}',
   'notify.updateComplete': 'Update complete',
   'notify.updateFailed': 'Update failed',
   'notify.updateResult': '{ok} succeeded · {failed} failed',

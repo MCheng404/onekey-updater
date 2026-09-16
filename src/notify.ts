@@ -14,7 +14,6 @@ import './styles.css';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { ICON } from './icons';
 import { applyTheme, loadTheme, type ThemeState } from './theme';
 import { applyFont, loadFont, watchFont } from './font-settings';
 import { t } from './i18n';
@@ -151,13 +150,9 @@ function buildToastEl(p: ToastPayload): HTMLElement {
   time.className = 'toast-time';
   time.textContent = p.ts;
 
-  const closeBtn = document.createElement('button');
-  closeBtn.className = 'toast-close';
-  closeBtn.innerHTML = ICON.x;
-  closeBtn.title = t('common.close');
-  closeBtn.setAttribute('aria-label', t('notify.closeAria'));
-
-  head.append(title, time, closeBtn);
+  // 关闭按钮已取消：整张卡片本身就是关闭热区（见下方的 click 绑定）。
+  // 留一个 ✕ 既冗余，又白白吃掉标题与时间的横向空间 —— 位置靠边的通知本来就窄。
+  head.append(title, time);
 
   // 正文
   const body = document.createElement('div');
@@ -202,14 +197,17 @@ function spawnToast(p: ToastPayload): void {
     removed: false,
   };
 
-  // 关闭按钮
-  el.querySelector('.toast-close')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    dismissToast(id);
-  });
-
-  // 点击卡片关闭
+  // 点卡片任意位置即关闭（唯一的关闭方式，所以无障碍上也要能键盘触发）
+  el.setAttribute('role', 'button');
+  el.tabIndex = 0;
+  el.setAttribute('aria-label', t('notify.dismissAria', { title: p.title }));
   el.addEventListener('click', () => dismissToast(id));
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      dismissToast(id);
+    }
+  });
 
   // 悬停暂停 / 离开恢复
   el.addEventListener('mouseenter', () => {
