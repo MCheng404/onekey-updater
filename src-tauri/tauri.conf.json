@@ -23,6 +23,7 @@
         "decorations": false,
         "shadow": true,
         "transparent": true,
+        "visible": false,
         "windowEffects": {
           "effects": ["acrylic", "mica"]
         }

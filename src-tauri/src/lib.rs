@@ -8,6 +8,11 @@ mod util;
 
 use std::collections::HashMap;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+#[cfg(windows)]
+use util::CREATE_NO_WINDOW;
+
 use icon::fetch_icons_blocking;
 use model::{EnvStatus, IconEntry, ItemResult, LogLine, NotifyPrefs, Progress, Source, UpdateItem};
 use sources::{
@@ -344,12 +349,15 @@ const AUTOSTART_REG_VALUE: &str = "OneKeyUpdater";
 /// 查询是否已启用开机自启动
 #[tauri::command]
 async fn get_autostart() -> Result<bool, String> {
-    let output = std::process::Command::new("reg")
-        .args(["query", AUTOSTART_REG_KEY, "/v", AUTOSTART_REG_VALUE])
+    // ⚠️ 必须带 CREATE_NO_WINDOW：设置窗口在应用启动时就会调这个命令（读取开关状态），
+    // 裸调 reg 会让黑窗一闪 —— 这是"开机自启动时闪过一个 cmd 窗口"的来源。
+    let mut cmd = std::process::Command::new("reg");
+    cmd.args(["query", AUTOSTART_REG_KEY, "/v", AUTOSTART_REG_VALUE])
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map_err(|e| e.to_string())?;
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    let output = cmd.status().map_err(|e| e.to_string())?;
     Ok(output.success())
 }
 
@@ -366,31 +374,35 @@ async fn set_autostart(enable: bool) -> Result<(), String> {
         // 追加 --autostart 参数，标识开机自启动模式
         // main.rs 已设置 windows_subsystem="windows"，不会弹出控制台窗口
         let quoted = format!("\"{}\" --autostart", exe_path);
-        let status = std::process::Command::new("reg")
-            .args([
-                "add",
-                AUTOSTART_REG_KEY,
-                "/v",
-                AUTOSTART_REG_VALUE,
-                "/t",
-                "REG_SZ",
-                "/d",
-                &quoted,
-                "/f",
-            ])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .map_err(|e| e.to_string())?;
+        // 同上：不加 CREATE_NO_WINDOW 的话，点开关的一瞬间会闪一个黑窗
+        let mut cmd = std::process::Command::new("reg");
+        cmd.args([
+            "add",
+            AUTOSTART_REG_KEY,
+            "/v",
+            AUTOSTART_REG_VALUE,
+            "/t",
+            "REG_SZ",
+            "/d",
+            &quoted,
+            "/f",
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        let status = cmd.status().map_err(|e| e.to_string())?;
         if !status.success() {
             return Err("写入注册表失败".into());
         }
     } else {
-        let _ = std::process::Command::new("reg")
-            .args(["delete", AUTOSTART_REG_KEY, "/v", AUTOSTART_REG_VALUE, "/f"])
+        let mut cmd = std::process::Command::new("reg");
+        cmd.args(["delete", AUTOSTART_REG_KEY, "/v", AUTOSTART_REG_VALUE, "/f"])
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
+            .stderr(std::process::Stdio::null());
+        #[cfg(windows)]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        let _ = cmd.status();
     }
     Ok(())
 }
@@ -440,7 +452,14 @@ fn hide_on_close(window: &WebviewWindow) {
 /// 1920×1080 屏上，工作区只有约 1280×693 逻辑像素，而配置写的是 1120×760——
 /// 高度就超了，`center()` 之后标题栏会被顶到屏幕外，用户拖都拖不动。
 fn fit_to_work_area(window: &WebviewWindow) {
-    let Ok(Some(monitor)) = window.current_monitor() else {
+    // 隐藏窗口拿不到 current_monitor()，退回主显示器 —— 自启动模式下主窗口是隐藏的，
+    // 但它之后会显示在同一块屏幕上，适配必须照做，否则小屏上窗口会超出工作区。
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else {
         return;
     };
     let scale = monitor.scale_factor();
@@ -462,9 +481,18 @@ fn fit_to_work_area(window: &WebviewWindow) {
     let h = cur_h.min(max_h - pad);
 
     if w < cur_w - 0.5 || h < cur_h - 0.5 {
+        // ⚠️ set_size / center 在部分后端会把窗口一并显示出来。settings / about
+        // 在配置里是 visible:false 的，如果这里是"隐藏窗口被顺手显示"，用户看到的
+        // 就是"启动时关于窗口自己冒出来"。所以先记下原可见状态，做完再还原。
+        let was_visible = window.is_visible().unwrap_or(true);
+
         // 若算出来低于窗口最小尺寸，Tauri 会自动夹回最小值（尽力而为）
         let _ = window.set_size(LogicalSize::new(w, h));
         let _ = window.center();
+
+        if !was_visible {
+            let _ = window.hide();
+        }
     }
 }
 
@@ -505,6 +533,16 @@ pub fn run(autostart: bool) {
                 });
             }
 
+            // 主窗口在 tauri.conf.json 里是 visible:false。
+            // 配置若默认可见，窗口会在 setup 执行前就显示出来 —— 自启动时就成了
+            // "开机闪一下主窗口"。所以这里显式区分：非自启动才显示，
+            // 且必须在 DPI 适配之前显示（可见窗口才拿得到准确的显示器信息）。
+            if !autostart {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                }
+            }
+
             // 高分屏适配：把各窗口收进当前显示器工作区，避免超出屏幕
             for label in ["main", "settings", "about"] {
                 if let Some(window) = app.get_webview_window(label) {
@@ -512,11 +550,18 @@ pub fn run(autostart: bool) {
                 }
             }
 
-            // 开机自启动模式：主窗口默认隐藏，后台静默检查更新
-            // 有更新时前端会调用 show() 显示窗口，无更新则保持后台运行
+            // 开机自启动模式：所有窗口先全部藏起来，后台静默检查更新，
+            // 有更新时前端再 show() 主窗口。
+            //
+            // ⚠️ 必须把 settings / notify / about 一并藏。上面 fit_to_work_area 会对
+            // 隐藏窗口调 set_size() / center()；在小屏或高 DPI 下窗口尺寸一旦算出需要
+            // 收缩，这些调用有可能把它带出来 —— 用户看到的就是"开机自启动时
+            // 关于窗口自己冒出来"。只藏 main 挡不住。
             if autostart {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.hide();
+                for label in ["main", "settings", "notify", "about"] {
+                    if let Some(window) = app.get_webview_window(label) {
+                        let _ = window.hide();
+                    }
                 }
             }
 
