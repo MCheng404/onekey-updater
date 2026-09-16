@@ -120,7 +120,7 @@ fn parse_table(out: &str, log: LogFn) -> Vec<UpdateItem> {
     }
 
     if body_start == usize::MAX {
-        if out.contains("无法识别") || out.contains("使用情况") {
+        if looks_like_usage_help(&out) {
             log("err", tr!("winget.badArgs"));
         } else {
             log("ok", tr!("winget.allLatest"));
@@ -143,6 +143,33 @@ fn parse_table(out: &str, log: LogFn) -> Vec<UpdateItem> {
     }
 
     items
+}
+
+/// 判断输出是不是 winget 的帮助/用法文本（即"当前版本的 winget 不认这些参数"）。
+///
+/// ⚠️ **不能只认中文提示**：原先写死 `contains("无法识别") || contains("使用情况")`，
+/// 在英文或其它语言的系统上这两个词永远不会出现 → 会误判成"全部是最新版本"，
+/// 等于对用户撒谎。所以这里分成两道：
+///  1) 多语言关键词，覆盖最常见的几种；
+///  2) 与语言无关的结构特征 —— 帮助文本里一定有以 `-` 开头的选项行（如 `  -v,--version`）。
+/// 第 2 条是真正的兜底：换任何语言都成立。
+fn looks_like_usage_help(out: &str) -> bool {
+    const MARKERS: &[&str] = &[
+        "无法识别", "使用情况", // 简体中文
+        "無法辨識", "使用方式", // 繁體中文
+        "Usage", "usage:", // 英文
+        "Неизвестн", "Использование", // 俄文
+        "認識され", "使用法", // 日文
+    ];
+    if MARKERS.iter().any(|m| out.contains(m)) {
+        return true;
+    }
+
+    out.lines().any(|line| {
+        let t = line.trim_start();
+        // 以 - 开头，且不是表格分隔线（一整行都是 -）
+        t.starts_with('-') && !t.chars().all(|c| c == '-' || c == ' ')
+    })
 }
 
 /// 解析单行表格记录。
@@ -196,6 +223,28 @@ Some(UpdateItem {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detects_usage_help_regardless_of_locale() {
+        // 英文系统的"参数不认识"输出 —— 老实现只认中文，这里必须也认出来
+        let en = "Unrecognized command\n\
+                  Usage: winget [<command>]\n  \
+                  -v,--version  Show the version";
+        assert!(looks_like_usage_help(en), "英文用法文本没被识别");
+
+        let zh = "无法识别输入。\n使用情况: winget [<命令>]";
+        assert!(looks_like_usage_help(zh), "中文用法文本没被识别");
+
+        // 正常表格输出不能被误判（分隔线是"整行都是 -"，要排除掉）
+        let table = "名称  ID  版本  可用  源\n\
+                     ---------------------------------\n\
+                     Foo  Bar.Baz  1.0  2.0  winget";
+        assert!(!looks_like_usage_help(table), "正常表格被误判成用法文本");
+
+        // "没有可用升级"也不能被误判
+        let none = "No installed package found matching input criteria.";
+        assert!(!looks_like_usage_help(none), "无升级提示被误判成用法文本");
+    }
 
     #[test]
     fn parses_normal_row() {
