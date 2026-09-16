@@ -303,7 +303,7 @@ body.reduce-motion *::after {
     transform 0.1s var(--ease);
 }
 .tb-btn:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
   color: var(--text);
 }
 .tb-btn:active {
@@ -389,7 +389,7 @@ body.reduce-motion *::after {
 }
 .btn:hover:not(:disabled) {
   background: var(--bg-card-hover);
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
 }
 .btn:active:not(:disabled) {
   transform: translateY(1px) scale(0.97);
@@ -421,7 +421,7 @@ body.reduce-motion *::after {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  border: 1.6px solid rgba(255, 255, 255, 0.22);
+  border: 1.6px solid color-mix(in srgb, var(--text) 22%, transparent);
   border-top-color: currentColor;
   animation: spin 0.7s linear infinite;
 }
@@ -578,6 +578,18 @@ body.reduce-motion *::after {
   background: var(--bg-card-hover);
   color: var(--text);
 }
+/* 设置面板控件的"按下"反馈。
+   主窗口的按钮本来都有（.tb-btn / .btn / .item-action-btn 各自的 :active），
+   但设置面板里最常点的这几个一直没有 —— 点下去毫无回应，手感是断的。 */
+.mini-btn:active {
+  transform: scale(0.95);
+}
+.preset:active {
+  transform: translateY(0) scale(0.98);
+}
+.mode-btn:active {
+  transform: scale(0.97);
+}
 .log-body {
   flex: 1;
   overflow-y: auto;
@@ -594,13 +606,13 @@ body.reduce-motion *::after {
   padding: 8px 11px;
   margin-bottom: 6px;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.032);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--text) 3.2%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 5%, transparent);
   animation: cardIn 0.22s var(--ease) both;
   transition: background 0.15s var(--ease);
 }
 .log-card:hover {
-  background: rgba(255, 255, 255, 0.062);
+  background: color-mix(in srgb, var(--text) 6.2%, transparent);
 }
 .log-time {
   font-family: var(--font-mono);
@@ -615,7 +627,7 @@ body.reduce-motion *::after {
   letter-spacing: 0.6px;
   padding: 1.5px 6px;
   border-radius: var(--radius-xs);
-  background: rgba(255, 255, 255, 0.07);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
   color: var(--text-dim);
   white-space: nowrap;
 }
@@ -701,7 +713,7 @@ body.reduce-motion *::after {
   gap: 11px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.022);
+  background: color-mix(in srgb, var(--text) 2.2%, transparent);
 }
 .group-title {
   font-size: var(--t-6);
@@ -728,7 +740,7 @@ body.reduce-motion *::after {
   align-items: center;
   gap: 13px;
   padding: 10px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 4%, transparent);
   transition: background 0.14s var(--ease);
   position: relative;
   /* 入场动画统一在文件后部「动画：入场更精细」一节定义（含单独的 @keyframes itemIn） */
@@ -797,7 +809,7 @@ body.reduce-motion *::after {
   gap: 4px;
   opacity: 0;
   transform: translateX(4px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.15s var(--ease), transform 0.15s var(--ease);
 }
 .item:hover .item-actions {
   opacity: 1;
@@ -811,13 +823,13 @@ body.reduce-motion *::after {
   justify-content: center;
   border: none;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--text-dim);
   cursor: pointer;
   transition: background 0.12s, color 0.12s, transform 0.12s var(--ease);
 }
 .item-action-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
   color: var(--text);
 }
 .item-action-btn.danger:hover {
@@ -1048,7 +1060,7 @@ body.reduce-motion *::after {
   height: 30px;
   border-radius: var(--radius-sm);
   margin-bottom: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
 }
 .preset-name {
   font-size: var(--t-6);
@@ -1059,11 +1071,15 @@ body.reduce-motion *::after {
   align-items: center;
   gap: 13px;
   padding: 10px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 4.5%, transparent);
 }
 .field-row label {
-  flex: 0 0 88px;
+  /* 固定列宽是为了让各行的控件竖向对齐；但英文标签明显更长
+     （如 "Auto-check on startup"），88px 会挤成两三行 → 加宽一点，
+     并给 line-height 让换行时行高不至于贴在一起。 */
+  flex: 0 0 104px;
   font-size: var(--t-6);
+  line-height: 1.35;
   color: var(--text-dim);
 }
 .field-value {
@@ -1123,7 +1139,7 @@ input[type='range'] {
   width: 42px;
   height: 22px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.09);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
   border: 1px solid var(--line-strong);
   transition: background 0.18s var(--ease), border-color 0.18s var(--ease);
 }
@@ -1246,7 +1262,7 @@ input[type='color']:focus-visible {
   height: 100%;
   object-fit: contain;
   /* 透明 PNG 在深色背景上太暗，给个轻微高亮 */
-  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.06));
+  filter: drop-shadow(0 0 1px color-mix(in srgb, var(--text) 6%, transparent));
   pointer-events: none;
 }
 .item-icon-fallback {
@@ -1702,7 +1718,15 @@ input[type='color']:focus-visible {
     0 1px 0 rgba(0, 0, 0, 0.35),
     1px 1px 0 rgba(0, 0, 0, 0.35);
 }
-/* 浅色模式：把深色投影统一换成黑色描边 */
+/* 浅色模式：文字统一改黑色描边（只动渲染方式，不改颜色/字号/间距）。
+   分两层写是有原因的：
+   1) 先在**容器**上设一次 —— text-shadow 会继承，窗口内所有文字默认就是描边；
+   2) 再点名覆盖下面这批元素 —— 它们在深色模式里各自声明过投影，
+      而"元素上直接声明的"永远压过"从父级继承来的"，不点名就会漏掉。 */
+[data-theme='light'] .glass-root,
+[data-theme='light'] .toast-root {
+  text-shadow: var(--text-outline);
+}
 [data-theme='light'] .tb-title,
 [data-theme='light'] .group-title,
 [data-theme='light'] .item-name,
