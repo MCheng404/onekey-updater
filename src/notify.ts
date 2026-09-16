@@ -98,6 +98,17 @@ const DRAG_START_PX = 6;
 const FLING_FACTOR = 55;
 /** 惯性位移上限，防止甩得太夸张 */
 const FLING_MAX = 110;
+/**
+ * 拖拽期间给窗口临时留出的活动空间（逻辑 px）。
+ *
+ * 不这么做的话，卡片一移动就会被窗口边界裁掉，手感就是"完全拖不动"。
+ * 240 够横向/纵向随手拖一段；只在按住并真正拖动时生效，松手立即归零，
+ * 所以不会长期留下一大片挡鼠标的透明区域。
+ */
+const DRAG_RESERVE = 240;
+
+/** 当前窗口是否已按拖拽放大（用于松手后归零，避免重复调用） */
+let windowReserved = false;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(Math.max(v, lo), hi);
@@ -138,13 +149,13 @@ function applyPrefs(): void {
  * 窗口透明留白同样会拦截鼠标点击，因此窗口必须**贴合**内容：
  * 这里实测所有 toast 的高度总和 + 间距 + 内边距 + 容差，交给 Rust 换算物理像素。
  */
-function syncWindowSize(): void {
+function syncWindowSize(reserve = 0): void {
   if (!root) return;
   const toasts = Array.from(root.querySelectorAll<HTMLElement>('.toast'));
   if (toasts.length === 0) return;
   const sum = toasts.reduce((s, el) => s + el.offsetHeight, 0);
   const height = sum + TOAST_GAP * (toasts.length - 1) + ROOT_PAD * 2 + SIZE_SLACK;
-  void invoke('layout_notify', { height }).catch(() => undefined);
+  void invoke('layout_notify', { height, reserve }).catch(() => undefined);
 }
 
 /**
@@ -293,8 +304,13 @@ function spawnToast(p: ToastPayload): void {
     lastY = e.clientY;
     lastT = now;
 
-    // 脱离列表定位（CSS 里会同时 animation: none，否则入场动画的 fill 会盖掉 transform）
+    // 脱离列表定位（CSS 里会同时 animation: none，否则入场动画的 fill 会盖掉 transform）。
+    // 同时把窗口临时撑大 —— 否则卡片一移动就被窗口边界裁掉，手感就是"拖不动"。
     el.classList.add('toast-free');
+    if (!windowReserved) {
+      windowReserved = true;
+      syncWindowSize(DRAG_RESERVE);
+    }
     el.style.setProperty('--dx', `${dx}px`);
     el.style.setProperty('--dy', `${dy}px`);
   });
@@ -304,6 +320,11 @@ function spawnToast(p: ToastPayload): void {
     pressing = false;
     el.classList.remove('toast-pressed');
     if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    // 松手就把窗口缩回去（卡片马上要消失了，不需要再留活动空间）
+    if (windowReserved) {
+      windowReserved = false;
+      syncWindowSize();
+    }
 
     if (!dragged) {
       // 鼠标没动就松开：原地消失
@@ -324,7 +345,15 @@ function spawnToast(p: ToastPayload): void {
   el.addEventListener('pointerup', finishDrag);
   el.addEventListener('pointercancel', () => {
     pressing = false;
+    dragged = false;
     el.classList.remove('toast-pressed');
+    el.classList.remove('toast-free');
+    el.style.setProperty('--dx', '0px');
+    el.style.setProperty('--dy', '0px');
+    if (windowReserved) {
+      windowReserved = false;
+      syncWindowSize();
+    }
   });
 
   el.addEventListener('keydown', (e) => {

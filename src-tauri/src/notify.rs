@@ -120,13 +120,13 @@ pub fn show_toast(app: &AppHandle, title: &str, body: &str, level: &str) -> Resu
     // 顺序很重要：反过来（先 show 后 layout）窗口会以"上一次的旧位置/旧尺寸"
     // 先渲染一帧才被挪走，肉眼就是"莫名其妙闪一下的窗口"。
     // layout 在隐藏状态下拿不到显示器时会自行跳过，前端随后用 layout_notify 校正。
-    let _ = layout(&window, &prefs.position, NOTIFY_BASE_H);
+    let _ = layout(&window, &prefs.position, NOTIFY_BASE_H, 0.0);
 
     let _ = window.unminimize();
     let _ = window.show();
 
     // 显示后再校正一次（此时必定能拿到有效显示器），确保位置准确
-    let _ = layout(&window, &prefs.position, NOTIFY_BASE_H);
+    let _ = layout(&window, &prefs.position, NOTIFY_BASE_H, 0.0);
 
     // 推送消息
     let payload = json!({
@@ -151,7 +151,12 @@ pub fn show_toast(app: &AppHandle, title: &str, body: &str, level: &str) -> Resu
 /// - `bottom-*` 窗口底边贴工作区底边（新通知向上生长）
 ///
 /// `height_css` 由前端实测（CSS px），Rust 侧按显示器缩放系数换算。
-pub fn layout(window: &WebviewWindow, position: &str, height_css: f64) -> Result<(), String> {
+pub fn layout(
+    window: &WebviewWindow,
+    position: &str,
+    height_css: f64,
+    reserve: f64,
+) -> Result<(), String> {
     let monitor = window
         .current_monitor()
         .map_err(|e| e.to_string())?
@@ -165,8 +170,16 @@ pub fn layout(window: &WebviewWindow, position: &str, height_css: f64) -> Result
     let ox = work.position.x as f64 / scale;
     let oy = work.position.y as f64 / scale;
 
-    let h = height_css.max(NOTIFY_MIN_H);
-    let w = NOTIFY_W;
+    // reserve：拖拽期间临时留出的活动空间。
+    //
+    // 关键点：**让多出来的空间落在背离内容的那一侧**，内容仍贴在原来的屏幕边缘。
+    // 好在下面几个锚点公式本来就依赖 h / w —— 顶部 y 固定（往下方长）、
+    // 底部 y = work_h - h（h 变大即往上长）、左侧 x 固定、右侧 x = work_w - w
+    // —— 所以只需要把 reserve 加进 h / w，六个位置的生长方向就自动是对的，
+    // 不需要额外的反向偏移（那样很容易写错，把内容推出屏幕）。
+    let extra = reserve.max(0.0);
+    let h = height_css.max(NOTIFY_MIN_H) + extra;
+    let w = NOTIFY_W + extra;
 
     window
         .set_size(LogicalSize::new(w, h))
