@@ -7,6 +7,7 @@
 输出：src/assets/fonts/*.woff2
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -28,12 +29,39 @@ UI_TEXT = (
 )
 
 
+# 界面文案的真实来源：语言包、后端消息表、四个窗口的 HTML。
+# 按这些文件里实际出现的汉字子集化，比"整个字库"精准得多 ——
+# 界面文案是确定的，没必要为几乎永远不会显示的字形买单。
+UI_SOURCES = (
+    'index.html',
+    'settings.html',
+    'notify.html',
+    'about.html',
+    'src/i18n.ts',
+    'src-tauri/src/i18n.rs',
+)
+
+
+def chars_actually_used() -> set:
+    """从源码里抽出会显示出来的汉字（含标点）。"""
+    found = set()
+    for rel in UI_SOURCES:
+        path = os.path.join(ROOT, rel)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding='utf-8') as f:
+            found.update(re.findall(r'[\u2e80-\u9fff\u3000-\u303f\uff00-\uffef]', f.read()))
+    return found
+
+
 def build_charset() -> str:
     chars = set()
     for code in range(0x20, 0x7F):
         chars.add(chr(code))
-    # GB2312 一二级汉字，覆盖日常用字
-    for hi in range(0xB0, 0xF8):
+    # GB2312 **一级**汉字（最常用的 3755 字）。既覆盖界面文案，也兜住动态内容 ——
+    # winget/npm 的包名里会出现常见中文（如「微信」），不能只收界面用字。
+    # 不收二级汉字：那是生僻字，界面上几乎不出现，白撑体积。
+    for hi in range(0xB0, 0xD8):
         for lo in range(0xA1, 0xFF):
             try:
                 chars.add(bytes([hi, lo]).decode('gb2312'))
@@ -41,6 +69,7 @@ def build_charset() -> str:
                 continue
     chars.update(EXTRA_SYMBOLS)
     chars.update(UI_TEXT)
+    chars.update(chars_actually_used())
     return ''.join(sorted(chars))
 
 

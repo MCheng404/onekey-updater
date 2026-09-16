@@ -30,7 +30,9 @@ encoding_rs = "0.8"
 [profile.release]
 codegen-units = 1
 lto = true
-opt-level = "s"
+# "z" 比 "s" 更省体积；本应用是 I/O 密集型（大量时间花在等 npm/winget 子进程），
+# 不吃 CPU，所以用"体积优先"换来的那点性能代价可以忽略。
+opt-level = "z"
 panic = "abort"
 strip = true
 incremental = false
