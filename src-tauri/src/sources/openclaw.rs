@@ -1,4 +1,5 @@
 use crate::model::{Source, UpdateItem};
+use crate::tr;
 use crate::sources::{LogFn, UpdateSource};
 use crate::util::{
     cmd_exists, compare_version, extract_json_object, is_admin, run_capture_with_timeout, run_stream,
@@ -17,11 +18,11 @@ impl UpdateSource for OpenclawSource {
 
     fn check(&self, log: LogFn) -> Vec<UpdateItem> {
         // 注意：check_one 已调用 source.available()，这里不需要重复检查
-        log("info", "正在检查 OpenClaw 更新...".into());
+        log("info", tr!("openclaw.checking"));
 
         let raw = run_capture_with_timeout("openclaw", &["--version"], 15).unwrap_or_default();
         let current = extract_version(&raw);
-        log("cmd", format!("当前版本：{}", current));
+        log("cmd", tr!("openclaw.current", current));
 
         // 一次 npm view 拿全部 dist-tag（latest / beta），替代两次独立查询 ——
         // 这是 OpenClaw 源在"检查更新"阶段的主要耗时。
@@ -29,8 +30,10 @@ impl UpdateSource for OpenclawSource {
         let stable_ver = tags.iter().find(|(t, _)| t == "latest").map(|(_, v)| v.clone());
         let beta_ver = tags.iter().find(|(t, _)| t == "beta").map(|(_, v)| v.clone());
 
-        log("cmd", format!("正式版最新：{}", stable_ver.as_deref().unwrap_or("未知")));
-        log("cmd", format!("beta 最新：{}", beta_ver.as_deref().unwrap_or("未知")));
+        let stable_text = stable_ver.clone().unwrap_or_else(|| tr!("common.unknown"));
+        let beta_text = beta_ver.clone().unwrap_or_else(|| tr!("common.unknown"));
+        log("cmd", tr!("openclaw.stable", stable_text));
+        log("cmd", tr!("openclaw.betaLatest", beta_text));
 
         // 确定目标版本和 tag：beta > stable 时用 beta，否则用正式版
         let (latest, tag) = match (&stable_ver, &beta_ver) {
@@ -44,19 +47,19 @@ impl UpdateSource for OpenclawSource {
             (Some(s), None) => (s.clone(), "latest"),
             (None, Some(b)) => (b.clone(), "beta"),
             (None, None) => {
-                log("warn", "无法获取 OpenClaw 版本信息".into());
+                log("warn", tr!("openclaw.noVersion"));
                 return vec![];
             }
         };
 
         if compare_version(&current, &latest) >= 0 {
-            log("ok", format!("OpenClaw 已是最新版本（{}，{} 通道）", current, tag));
+            log("ok", tr!("openclaw.upToDate", current, tag));
             return vec![];
         }
 
         log(
             "info",
-            format!("OpenClaw 可更新：{} → {} ({})", current, latest, tag),
+            tr!("openclaw.available", current, latest, tag),
         );
 
         vec![UpdateItem {
@@ -73,10 +76,10 @@ impl UpdateSource for OpenclawSource {
 
     fn update(&self, item: &UpdateItem, log: LogFn) -> bool {
         let tag = item.tag.clone().unwrap_or_else(|| "latest".to_string());
-        log("info", format!("正在更新 OpenClaw 到 {}...", tag));
+        log("info", tr!("openclaw.updating", tag));
 
         // 1. 停止 gateway
-        log("info", "正在停止 OpenClaw gateway...".into());
+        log("info", tr!("openclaw.stopping"));
         let _ = run_stream("openclaw", &["gateway", "stop"], |line| {
             log("cmd", line.to_string());
         });
@@ -84,9 +87,9 @@ impl UpdateSource for OpenclawSource {
         // 2. 安装
         let admin = is_admin();
         if admin {
-            log("info", "使用管理员权限安装...".into());
+            log("info", tr!("openclaw.adminInstall"));
         } else {
-            log("warn", "非管理员模式，尝试用户目录安装...".into());
+            log("warn", tr!("openclaw.userInstall"));
             let home = std::env::var("USERPROFILE").unwrap_or_default();
             let prefix = format!("{}\\.local", home);
             let _ = run_capture_with_timeout("npm", &["config", "set", "prefix", &prefix], 15);
@@ -101,20 +104,20 @@ impl UpdateSource for OpenclawSource {
 
         match code {
             Ok(0) => {
-                log("info", "正在重装 gateway 服务...".into());
+                log("info", tr!("openclaw.reinstall"));
                 let _ = run_stream("openclaw", &["gateway", "install", "--force"], |line| {
                     log("cmd", line.to_string());
                 });
-                log("info", "正在重启 gateway...".into());
+                log("info", tr!("openclaw.restarting"));
                 let _ = run_stream("openclaw", &["gateway", "restart"], |line| {
                     log("cmd", line.to_string());
                 });
-                log("ok", format!("OpenClaw 更新完成（{}）", tag));
+                log("ok", tr!("openclaw.done", tag));
                 true
             }
             _ => {
-                log("err", "OpenClaw 更新失败".into());
-                log("warn", "提示：可能需要以管理员身份运行".into());
+                log("err", tr!("openclaw.failed"));
+                log("warn", tr!("openclaw.adminHint"));
                 false
             }
         }

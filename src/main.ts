@@ -13,7 +13,7 @@ import {
   isItemIgnored,
   loadSettings,
 } from './app-settings';
-import { applyI18n, t, watchLang } from './i18n';
+import { applyI18n, getLang, t, watchLang } from './i18n';
 
 type SourceKind = 'npm' | 'winget' | 'pip' | 'openclaw';
 
@@ -934,9 +934,14 @@ async function init() {
   try {
     document.title = t('app.title');
     applyI18n();
+    // 后端也要知道当前语言。日志面板的文案是 Rust 产出的
+    // （"发现 N 个 winget 软件可更新"这类），前端 i18n 管不到 ——
+    // 不推语言的话，切到英文后界面全英文、唯独日志仍是中文。
+    void invoke('set_language', { lang: getLang() }).catch(() => undefined);
     watchLang(() => {
       document.title = t('app.title');
       applyI18n();
+      void invoke('set_language', { lang: getLang() }).catch(() => undefined);
       if (lastEnv) renderEnv(lastEnv);
       renderList();
       refreshActions();

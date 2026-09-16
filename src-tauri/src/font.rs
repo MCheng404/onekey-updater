@@ -8,6 +8,7 @@
 //! 2/3 选中的文件通过**自定义协议** `http://font.localhost/ui` 提供给 WebView，
 //! 避免把几十 MB 的字体转 base64 走 IPC 传（CJK 字体 base64 后能到 30MB 量级）。
 
+use crate::tr;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -67,7 +68,7 @@ pub fn persist(path: Option<String>) -> Result<(), String> {
         Some(p) if !p.trim().is_empty() => {
             let pb = PathBuf::from(p);
             if !pb.is_file() {
-                return Err(format!("字体文件不存在：{}", p));
+                return Err(tr!("font.fileMissing", p));
             }
             Some(pb)
         }

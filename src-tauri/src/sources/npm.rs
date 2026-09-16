@@ -1,4 +1,5 @@
 use crate::model::{Source, UpdateItem};
+use crate::tr;
 use crate::sources::{LogFn, UpdateSource};
 use crate::util::{cmd_exists, compare_version, extract_json_object, par_map, run_capture_with_timeout, run_stream};
 
@@ -21,12 +22,12 @@ impl UpdateSource for NpmSource {
     }
 
     fn check(&self, log: LogFn) -> Vec<UpdateItem> {
-        log("info", "正在检查 npm 全局包更新...".into());
+        log("info", tr!("npm.checking"));
 
         let out = match run_capture_with_timeout("npm", &["outdated", "-g", "--json"], 45) {
             Ok(o) => o,
             Err(e) => {
-                log("err", format!("npm 检查失败：{}", e));
+                log("err", tr!("npm.checkFailed", e));
                 return vec![];
             }
         };
@@ -34,7 +35,7 @@ impl UpdateSource for NpmSource {
         let json_part = match extract_json_object(&out) {
             Some(s) => s,
             None => {
-                log("ok", "npm 全局包全部是最新版本".into());
+                log("ok", tr!("npm.allLatest"));
                 return vec![];
             }
         };
@@ -42,7 +43,7 @@ impl UpdateSource for NpmSource {
         let value: serde_json::Value = match serde_json::from_str(json_part) {
             Ok(v) => v,
             Err(e) => {
-                log("err", format!("npm 输出解析失败：{}", e));
+                log("err", tr!("npm.parseFailed", e));
                 return vec![];
             }
         };
@@ -50,7 +51,7 @@ impl UpdateSource for NpmSource {
         let obj = match value.as_object() {
             Some(o) if !o.is_empty() => o,
             _ => {
-                log("ok", "npm 全局包全部是最新版本".into());
+                log("ok", tr!("npm.allLatest"));
                 return vec![];
             }
         };
@@ -101,7 +102,7 @@ impl UpdateSource for NpmSource {
         for (name, current, tag, target) in resolved {
             // 交给专用源（如 OpenClawSource）处理的包不在这里重复列出
             if DELEGATED_PKGS.iter().any(|p| name.eq_ignore_ascii_case(p)) {
-                log("cmd", format!("跳过 {}（由专用源处理）", name));
+                log("cmd", tr!("npm.skipDelegated", name));
                 continue;
             }
 
@@ -115,7 +116,7 @@ impl UpdateSource for NpmSource {
             {
                 log(
                     "cmd",
-                    format!("{} 目标 {} 不高于已装 {}，忽略", name, target, current),
+                    tr!("npm.skipNotNewer", name, target, current),
                 );
                 continue;
             }
@@ -133,11 +134,11 @@ impl UpdateSource for NpmSource {
         }
 
         if items.is_empty() {
-            log("ok", "npm 全局包全部是最新版本".into());
+            log("ok", tr!("npm.allLatest"));
         } else {
             log(
                 "info",
-                format!("发现 {} 个 npm 包可更新", items.len()),
+                tr!("npm.found", items.len()),
             );
         }
 
@@ -147,7 +148,7 @@ impl UpdateSource for NpmSource {
     fn update(&self, item: &UpdateItem, log: LogFn) -> bool {
         let tag = item.tag.clone().unwrap_or_else(|| "latest".to_string());
         let label = format!("{}@{}", item.name, tag);
-        log("info", format!("正在更新 {}...", label));
+        log("info", tr!("update.starting", label));
 
         // 输出同时收集下来，失败时用来判断根因
         // （npm 自身依赖树损坏时只会打印 Cannot find module）
@@ -156,11 +157,11 @@ impl UpdateSource for NpmSource {
 
         // 非 latest tag 装不上时，回退到正式版
         if !ok && tag != "latest" {
-            log("warn", format!("{} 安装失败，回退到 @latest...", tag));
+            log("warn", tr!("npm.fallback", tag));
             captured.clear();
             ok = npm_install(&format!("{}@latest", item.name), log, &mut captured);
             if ok {
-                log("ok", format!("{}@latest 回退更新完成", item.name));
+                log("ok", tr!("npm.fallbackDone", item.name));
                 return true;
             }
         }
@@ -177,7 +178,7 @@ impl UpdateSource for NpmSource {
                 };
                 log(
                     "warn",
-                    format!("直接自更新失败，改用临时 npm（npx npm@{}）重试...", spec),
+                    tr!("npm.retryTemp", spec),
                 );
                 captured.clear();
                 let code = run_stream(
@@ -189,7 +190,7 @@ impl UpdateSource for NpmSource {
                     },
                 );
                 if matches!(code, Ok(0)) {
-                    log("ok", format!("{} 更新完成（经由临时 npm）", label));
+                    log("ok", tr!("npm.doneViaTemp", label));
                     return true;
                 }
             }
@@ -199,19 +200,18 @@ impl UpdateSource for NpmSource {
                 .iter()
                 .any(|l| l.contains("MODULE_NOT_FOUND") || l.contains("Cannot find module"))
             {
-                log("warn", "npm 自身依赖树疑似损坏（Cannot find module）。".into());
+                log("warn", tr!("npm.brokenTree"));
                 log(
                     "warn",
-                    "修复方法：用另一份 Node 自带的 npm 执行 install -g npm@latest，或重新安装 Node.js。"
-                        .into(),
+                    tr!("npm.brokenTreeFix"),
                 );
             }
 
-            log("err", format!("{} 更新失败", item.name));
+            log("err", tr!("update.failed", item.name));
             return false;
         }
 
-        log("ok", format!("{} 更新完成", label));
+        log("ok", tr!("update.done", label));
         true
     }
 }

@@ -1,4 +1,5 @@
 use crate::model::NotifyPrefs;
+use crate::tr;
 use crate::util::now_time;
 use serde_json::json;
 use std::fs;
@@ -45,7 +46,7 @@ pub fn load_prefs(_app: &AppHandle) -> NotifyPrefs {
 
 pub fn save_prefs(_app: &AppHandle, prefs: NotifyPrefs) -> Result<(), String> {
     let Some(path) = prefs_path() else {
-        return Err("无法获取 LOCALAPPDATA".into());
+        return Err(tr!("notify.noLocalAppData"));
     };
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -112,7 +113,7 @@ pub fn show_toast(app: &AppHandle, title: &str, body: &str, level: &str) -> Resu
     }
 
     let Some(window) = app.get_webview_window("notify") else {
-        return Err("通知窗口未配置".into());
+        return Err(tr!("notify.windowMissing"));
     };
 
     // 先按单条通知做一次兜底布局，**再**显示窗口。
@@ -154,7 +155,7 @@ pub fn layout(window: &WebviewWindow, position: &str, height_css: f64) -> Result
     let monitor = window
         .current_monitor()
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| "无法获取主显示器".to_string())?;
+        .ok_or_else(|| tr!("notify.noPrimaryMonitor"))?;
 
     let scale = monitor.scale_factor();
     // 工作区（排除任务栏）换算到逻辑坐标

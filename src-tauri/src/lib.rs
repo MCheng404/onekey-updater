@@ -1,4 +1,5 @@
 mod font;
+mod i18n;
 mod icon;
 mod logfile;
 mod model;
@@ -12,6 +13,8 @@ use std::collections::HashMap;
 use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 use util::CREATE_NO_WINDOW;
+// 注：`tr!` 由 i18n.rs 的 #[macro_export] 导出，在 crate 根可直接使用，
+// 这里**不能**再 `use crate::tr;`（会与根命名空间里的宏重复定义）。
 
 use icon::fetch_icons_blocking;
 use model::{EnvStatus, IconEntry, ItemResult, LogLine, NotifyPrefs, Progress, Source, UpdateItem};
@@ -48,6 +51,18 @@ async fn detect_env() -> Result<EnvStatus, String> {
     .map_err(|e| e.to_string())
 }
 
+/// 前端把当前语言推给后端。
+///
+/// 后端要自己产出日志文案（"发现 N 个 winget 软件可更新"），这些文案进的是
+/// 日志面板与日志文件，前端 i18n 管不到 —— 所以必须让后端知道当前语言，
+/// 否则切到英文后界面全英文、唯独日志仍是中文。
+///
+/// 主窗口前端在启动时、以及收到 lang-changed 事件时各调用一次。
+#[tauri::command]
+async fn set_language(lang: String) {
+    i18n::set_lang(&lang);
+}
+
 /// 检查全部可更新项，日志通过 update-log 事件流式推送
 #[tauri::command]
 async fn check_updates(app: AppHandle) -> Result<Vec<UpdateItem>, String> {
@@ -76,7 +91,7 @@ async fn check_updates(app: AppHandle) -> Result<Vec<UpdateItem>, String> {
         for h in handles {
             match h.join() {
                 Ok(mut part) => all.append(&mut part),
-                Err(_) => emit_log(&app, "err", "某个更新源线程异常终止，已跳过"),
+                Err(_) => emit_log(&app, "err", tr!("log.threadPanic")),
             }
         }
         all
@@ -96,11 +111,7 @@ struct SourceResult {
 /// 在独立线程里探测单个源
 fn check_one<S: UpdateSource + Send + 'static>(app: AppHandle, source: S) -> Vec<UpdateItem> {
     if !source.available() {
-        emit_log(
-            &app,
-            "warn",
-            format!("跳过 {}（未安装）", source.source().label()),
-        );
+        emit_log(&app, "warn", tr!("log.skipMissing", source.source().label()));
         return Vec::new();
     }
 
@@ -274,13 +285,13 @@ async fn get_ui_font_file() -> Option<String> {
 async fn get_log_dir() -> Result<String, String> {
     logfile::log_dir()
         .map(|p| p.to_string_lossy().to_string())
-        .ok_or_else(|| "无法定位日志目录".to_string())
+        .ok_or_else(|| tr!("lib.logDirFailed"))
 }
 
 /// 在文件资源管理器中打开日志文件夹
 #[tauri::command]
 async fn open_log_dir() -> Result<(), String> {
-    let dir = logfile::log_dir().ok_or_else(|| "无法定位日志目录".to_string())?;
+    let dir = logfile::log_dir().ok_or_else(|| tr!("lib.logDirFailed"))?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
     #[cfg(windows)]
@@ -368,7 +379,7 @@ async fn get_autostart() -> Result<bool, String> {
 #[tauri::command]
 async fn set_autostart(enable: bool) -> Result<(), String> {
     if enable {
-        let exe = std::env::current_exe().map_err(|e| format!("获取可执行文件路径失败: {}", e))?;
+        let exe = std::env::current_exe().map_err(|e| tr!("lib.exePathFailed", e))?;
         let exe_path = exe.to_string_lossy().to_string();
         // 用引号包裹路径，避免路径含空格时解析错误；
         // 追加 --autostart 参数，标识开机自启动模式
@@ -393,7 +404,7 @@ async fn set_autostart(enable: bool) -> Result<(), String> {
         cmd.creation_flags(CREATE_NO_WINDOW);
         let status = cmd.status().map_err(|e| e.to_string())?;
         if !status.success() {
-            return Err("写入注册表失败".into());
+            return Err(tr!("lib.regWriteFailed"));
         }
     } else {
         let mut cmd = std::process::Command::new("reg");
@@ -500,6 +511,9 @@ fn fit_to_work_area(window: &WebviewWindow) {
 pub fn run(autostart: bool) {
     // 必须在建窗口之前把上次选的字体读回内存，否则字体协议会先返回 404
     font::restore();
+    // 同理：setup 阶段就会产出日志文案（"已加载 N 个系统字体"），
+    // 此时前端还没跑、推不了语言，所以先恢复上次的语言。
+    i18n::restore();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -526,9 +540,9 @@ pub fn run(autostart: bool) {
                 std::thread::spawn(move || {
                     let n = font::list_system_fonts().len();
                     if n == 0 {
-                        emit_log(&handle, "warn", "未能读取系统字体（PowerShell 调用失败）");
+                        emit_log(&handle, "warn", tr!("log.fontsFailed"));
                     } else {
-                        emit_log(&handle, "info", format!("已加载 {} 个系统字体", n));
+                        emit_log(&handle, "info", tr!("log.fontsLoaded", n));
                     }
                 });
             }
@@ -602,6 +616,7 @@ pub fn run(autostart: bool) {
             get_autostart,
             set_autostart,
             get_startup_mode,
+            set_language,
             get_system_info
         ])
         .run(tauri::generate_context!())

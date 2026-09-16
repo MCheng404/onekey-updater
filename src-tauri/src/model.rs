@@ -13,13 +13,16 @@ pub enum Source {
 }
 
 impl Source {
-    pub fn label(&self) -> &'static str {
-        match self {
-            Source::Npm => "npm 全局包",
-            Source::Winget => "winget 软件",
-            Source::Pip => "pip 包",
-            Source::Openclaw => "OpenClaw",
-        }
+    /// 分组名。key 与前端 i18n 的 `group.*` 一致，文案随当前语言变化 ——
+    /// 后端自己产的日志（"跳过 X（未安装）"等）要用它，只切前端语言是不够的。
+    pub fn label(&self) -> String {
+        let key = match self {
+            Source::Npm => "group.npm",
+            Source::Winget => "group.winget",
+            Source::Pip => "group.pip",
+            Source::Openclaw => "group.openclaw",
+        };
+        crate::i18n::tr(key, &[])
     }
 
 }

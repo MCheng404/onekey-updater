@@ -1,4 +1,5 @@
 use crate::model::{Source, UpdateItem};
+use crate::tr;
 use crate::sources::{LogFn, UpdateSource};
 use crate::util::{cmd_exists, extract_json_array, run_capture, run_stream};
 
@@ -14,7 +15,7 @@ impl UpdateSource for WingetSource {
     }
 
     fn check(&self, log: LogFn) -> Vec<UpdateItem> {
-        log("info", "正在检查 winget 软件更新...".into());
+        log("info", tr!("winget.checking"));
 
         // winget 1.30 的 upgrade 子命令不支持 --output json，
         // 传了只会输出帮助文本。这里只传通用参数，解析走表格。
@@ -28,7 +29,7 @@ impl UpdateSource for WingetSource {
         ) {
             Ok(o) => o,
             Err(e) => {
-                log("err", format!("winget 检查失败：{}", e));
+                log("err", tr!("winget.checkFailed", e));
                 return vec![];
             }
         };
@@ -36,9 +37,9 @@ impl UpdateSource for WingetSource {
         // 优先走 JSON（未来版本若支持则更精确）
         if let Some(items) = try_json(&out) {
             if items.is_empty() {
-                log("ok", "winget 软件全部是最新版本".into());
+                log("ok", tr!("winget.allLatest"));
             } else {
-                log("info", format!("发现 {} 个 winget 软件可更新", items.len()));
+                log("info", tr!("winget.found", items.len()));
             }
             return items;
         }
@@ -48,7 +49,7 @@ impl UpdateSource for WingetSource {
 
     fn update(&self, item: &UpdateItem, log: LogFn) -> bool {
         let id = item.pkg_id.clone().unwrap_or_else(|| item.name.clone());
-        log("info", format!("正在更新 {}...", item.name));
+        log("info", tr!("update.starting", item.name));
 
         let code = run_stream(
             "winget",
@@ -66,11 +67,11 @@ impl UpdateSource for WingetSource {
 
         match code {
             Ok(0) => {
-                log("ok", format!("{} 更新完成", item.name));
+                log("ok", tr!("update.done", item.name));
                 true
             }
             _ => {
-                log("err", format!("{} 更新失败", item.name));
+                log("err", tr!("update.failed", item.name));
                 false
             }
         }
@@ -120,9 +121,9 @@ fn parse_table(out: &str, log: LogFn) -> Vec<UpdateItem> {
 
     if body_start == usize::MAX {
         if out.contains("无法识别") || out.contains("使用情况") {
-            log("err", "winget 参数不被当前版本支持".into());
+            log("err", tr!("winget.badArgs"));
         } else {
-            log("ok", "winget 软件全部是最新版本".into());
+            log("ok", tr!("winget.allLatest"));
         }
         return vec![];
     }
@@ -136,9 +137,9 @@ fn parse_table(out: &str, log: LogFn) -> Vec<UpdateItem> {
     }
 
     if items.is_empty() {
-        log("ok", "winget 软件全部是最新版本".into());
+        log("ok", tr!("winget.allLatest"));
     } else {
-        log("info", format!("发现 {} 个 winget 软件可更新", items.len()));
+        log("info", tr!("winget.found", items.len()));
     }
 
     items

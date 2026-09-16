@@ -1,3 +1,4 @@
+use crate::tr;
 use std::cmp::Ordering;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -66,7 +67,7 @@ pub fn run_capture_with_timeout(
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .output()
-                .map_err(|e| format!("执行 {} 失败: {}", program_owned, e))?;
+                .map_err(|e| tr!("util.execFailed", program_owned, e))?;
 
             let mut text = decode(&out.stdout);
             if text.trim().is_empty() {
@@ -78,7 +79,7 @@ pub fn run_capture_with_timeout(
     });
 
     rx.recv_timeout(Duration::from_secs(timeout_secs))
-        .map_err(|_| format!("{} 执行超时（{}秒）", program, timeout_secs))?
+        .map_err(|_| tr!("util.timeout", program, timeout_secs))?
 }
 
 /// 流式执行，逐行回调；返回进程退出码。默认 120 秒超时。
@@ -100,7 +101,7 @@ pub fn run_stream_with_timeout<F: FnMut(&str)>(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("启动 {} 失败: {}", program, e))?;
+        .map_err(|e| tr!("util.spawnFailed", program, e))?;
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -177,18 +178,18 @@ pub fn run_stream_with_timeout<F: FnMut(&str)>(
                         if std::time::Instant::now() > deadline {
                             let _ = child.kill();
                             let _ = child.wait();
-                            return Err(format!("{} 执行超时（{}秒）", program, timeout_secs));
+                            return Err(tr!("util.timeout", program, timeout_secs));
                         }
                         // 继续循环
                     }
-                    Err(e) => return Err(format!("等待 {} 失败: {}", program, e)),
+                    Err(e) => return Err(tr!("util.waitFailed", program, e)),
                 }
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 // 所有读取线程已退出，等待子进程结束
                 let status = child
                     .wait()
-                    .map_err(|e| format!("等待 {} 结束失败: {}", program, e))?;
+                    .map_err(|e| tr!("util.waitExitFailed", program, e))?;
                 return Ok(status.code().unwrap_or(-1));
             }
         }
@@ -210,7 +211,7 @@ pub fn run_powershell(script: &str, timeout_secs: u64) -> Result<String, String>
     // 所以必须写入 UTF-8 BOM。
     let mut bytes = vec![0xEF, 0xBB, 0xBF];
     bytes.extend_from_slice(script.as_bytes());
-    std::fs::write(&path, bytes).map_err(|e| format!("写入临时脚本失败: {}", e))?;
+    std::fs::write(&path, bytes).map_err(|e| tr!("util.writeScriptFailed", e))?;
 
     let path_str = path.to_string_lossy().to_string();
     let result = run_capture_with_timeout(

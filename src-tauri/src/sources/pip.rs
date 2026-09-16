@@ -1,4 +1,5 @@
 use crate::model::{Source, UpdateItem};
+use crate::tr;
 use crate::sources::{LogFn, UpdateSource};
 use crate::util::{cmd_exists, extract_json_array, run_capture_with_timeout, run_stream};
 
@@ -14,7 +15,7 @@ impl UpdateSource for PipSource {
     }
 
     fn check(&self, log: LogFn) -> Vec<UpdateItem> {
-        log("info", "正在检查 pip 包更新...".into());
+        log("info", tr!("pip.checking"));
 
         // --disable-pip-version-check：省掉"检查 pip 自身是否有新版"的那次网络往返
         let out = match run_capture_with_timeout(
@@ -24,7 +25,7 @@ impl UpdateSource for PipSource {
         ) {
             Ok(o) => o,
             Err(e) => {
-                log("err", format!("pip 检查失败：{}", e));
+                log("err", tr!("pip.checkFailed", e));
                 return vec![];
             }
         };
@@ -32,7 +33,7 @@ impl UpdateSource for PipSource {
         let arr = match extract_json_array(&out) {
             Some(s) => s,
             None => {
-                log("ok", "pip 包全部是最新版本".into());
+                log("ok", tr!("pip.allLatest"));
                 return vec![];
             }
         };
@@ -40,7 +41,7 @@ impl UpdateSource for PipSource {
         let value: serde_json::Value = match serde_json::from_str(arr) {
             Ok(v) => v,
             Err(e) => {
-                log("err", format!("pip 输出解析失败：{}", e));
+                log("err", tr!("pip.parseFailed", e));
                 return vec![];
             }
         };
@@ -48,7 +49,7 @@ impl UpdateSource for PipSource {
         let list = match value.as_array() {
             Some(a) if !a.is_empty() => a,
             _ => {
-                log("ok", "pip 包全部是最新版本".into());
+                log("ok", tr!("pip.allLatest"));
                 return vec![];
             }
         };
@@ -85,16 +86,16 @@ impl UpdateSource for PipSource {
         }
 
         if items.is_empty() {
-            log("ok", "pip 包全部是最新版本".into());
+            log("ok", tr!("pip.allLatest"));
         } else {
-            log("info", format!("发现 {} 个 pip 包可更新", items.len()));
+            log("info", tr!("pip.found", items.len()));
         }
 
         items
     }
 
     fn update(&self, item: &UpdateItem, log: LogFn) -> bool {
-        log("info", format!("正在更新 {}...", item.name));
+        log("info", tr!("update.starting", item.name));
 
         let code = run_stream("pip", &["install", "--upgrade", &item.name], |line| {
             log("cmd", line.to_string());
@@ -102,11 +103,11 @@ impl UpdateSource for PipSource {
 
         match code {
             Ok(0) => {
-                log("ok", format!("{} 更新完成", item.name));
+                log("ok", tr!("update.done", item.name));
                 true
             }
             _ => {
-                log("err", format!("{} 更新失败", item.name));
+                log("err", tr!("update.failed", item.name));
                 false
             }
         }
