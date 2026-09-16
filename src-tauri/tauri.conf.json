@@ -23,11 +23,7 @@
         "decorations": false,
         "shadow": true,
         "transparent": true,
-        "visible": false,
-        "windowEffects": {
-          "effects": ["acrylic", "mica"]
-        }
-      },
+        "visible": false      },
       {
         "label": "settings",
         "title": "设置",
@@ -41,11 +37,7 @@
         "decorations": false,
         "shadow": true,
         "visible": false,
-        "transparent": true,
-        "windowEffects": {
-          "effects": ["acrylic", "mica"]
-        }
-      },
+        "transparent": true      },
       {
         "label": "notify",
         "title": "通知",
@@ -73,11 +65,7 @@
         "decorations": false,
         "shadow": true,
         "visible": false,
-        "transparent": true,
-        "windowEffects": {
-          "effects": ["acrylic", "mica"]
-        }
-      }
+        "transparent": true      }
     ],
     "security": {
       "csp": null

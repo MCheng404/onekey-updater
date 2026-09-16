@@ -106,6 +106,41 @@
         </section>
 
         <section class="settings-section">
+          <h2 data-i18n="settings.sectionTextRender">文字渲染</h2>
+          <div class="field-row field-row-stack">
+            <label data-i18n="settings.textRenderMode">渲染方式</label>
+            <div class="mode-selector" id="textRenderSel">
+              <button class="mode-btn" data-render="auto" type="button" data-i18n="settings.renderAuto">跟随主题</button>
+              <button class="mode-btn" data-render="none" type="button" data-i18n="settings.renderNone">无</button>
+              <button class="mode-btn" data-render="outline" type="button" data-i18n="settings.renderOutline">描边</button>
+              <button class="mode-btn" data-render="shadow" type="button" data-i18n="settings.renderShadow">投影</button>
+              <button class="mode-btn" data-render="both" type="button" data-i18n="settings.renderBoth">描边+投影</button>
+            </div>
+          </div>
+          <div class="field-row">
+            <label for="rangeTextStrength" data-i18n="settings.textStrength">强度</label>
+            <input type="range" id="rangeTextStrength" min="0" max="100" step="5" />
+            <span class="field-value mono" id="valTextStrength"></span>
+          </div>
+          <p class="field-hint" data-i18n="settings.textRenderHint">浅色模式玻璃偏亮、桌面底色不可控，默认用黑色描边；深色模式默认用投影。觉得描边太重，就把强度调低或直接选「无」。</p>
+        </section>
+
+        <section class="settings-section">
+          <h2 data-i18n="settings.sectionMaterial">窗口材质</h2>
+          <div class="field-row field-row-stack">
+            <label data-i18n="settings.material">透明材质</label>
+            <div class="mode-selector" id="materialSel">
+              <button class="mode-btn" data-material="none" type="button" data-i18n="settings.materialNone">无</button>
+              <button class="mode-btn" data-material="acrylic" type="button" data-i18n="settings.materialAcrylic">亚克力</button>
+              <button class="mode-btn" data-material="mica" type="button" data-i18n="settings.materialMica">云母</button>
+              <button class="mode-btn" data-material="tabbed" type="button" data-i18n="settings.materialTabbed">云母 Alt</button>
+              <button class="mode-btn" data-material="blur" type="button" data-i18n="settings.materialBlur">实时玻璃</button>
+            </div>
+          </div>
+          <p class="field-hint" data-i18n="settings.materialHint">「实时玻璃」是 DWM 的实时高斯模糊（不额外着色），观感最接近 macOS；「亚克力」在其上还叠了噪点与色调；两个「云母」只取壁纸色调、不模糊窗口后面的内容，且需要 Windows 11。默认「无」性能最好。</p>
+        </section>
+
+        <section class="settings-section">
           <h2 data-i18n="settings.sectionFont">字体</h2>
           <div class="field-row">
             <label data-i18n="settings.fontSource">字体来源</label>

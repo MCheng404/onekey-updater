@@ -12,8 +12,10 @@ import {
   loadTheme,
   saveTheme,
   watchSystemTheme,
+  type TextRender,
   type ThemeMode,
   type ThemeState,
+  type WindowMaterial,
 } from './theme';
 import {
   AppSettings,
@@ -184,6 +186,48 @@ function bindThemeControls(): void {
 }
 
 /* ============ 主题模式（浅色/深色/跟随系统） ============ */
+/* ============ 文字渲染 ============ */
+
+function syncTextRender(): void {
+  document.querySelectorAll<HTMLElement>('[data-render]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.render === theme.textRender);
+  });
+  el<HTMLInputElement>('rangeTextStrength').value = String(theme.textStrength);
+  el('valTextStrength').textContent = `${theme.textStrength}%`;
+}
+
+function bindTextRender(): void {
+  document.querySelectorAll<HTMLElement>('[data-render]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      theme.textRender = (btn.dataset.render as TextRender) ?? 'auto';
+      commitTheme();
+    });
+  });
+  el<HTMLInputElement>('rangeTextStrength').addEventListener('input', (e) => {
+    theme.textStrength = Number((e.target as HTMLInputElement).value);
+    commitTheme();
+  });
+}
+
+/* ============ 窗口材质 ============ */
+
+function syncMaterial(): void {
+  document.querySelectorAll<HTMLElement>('[data-material]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.material === theme.material);
+  });
+}
+
+function bindMaterial(): void {
+  document.querySelectorAll<HTMLElement>('[data-material]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      // 材质由 applyTheme → 窗口 API 施加（见 theme.ts），
+      // 并且会 emit theme-changed，其它窗口跟着一起换
+      theme.material = (btn.dataset.material as WindowMaterial) ?? 'none';
+      commitTheme();
+    });
+  });
+}
+
 function syncModeButtons(): void {
   document.querySelectorAll<HTMLElement>('.mode-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.mode === theme.mode);
@@ -288,6 +332,8 @@ function applyI18nTexts(): void {
     renderPresets();
     syncThemeControls();
     syncNotifyControls();
+    syncTextRender();
+    syncMaterial();
     renderIgnoreList();
   } catch {
     /* ignore */
@@ -771,6 +817,8 @@ async function init(): Promise<void> {
   bindAutostart();
 
   /* 9. 语言选择 */
+  bindTextRender();
+  bindMaterial();
   bindLanguage();
   applyI18nTexts();
 

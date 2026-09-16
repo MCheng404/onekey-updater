@@ -527,7 +527,6 @@ body.reduce-motion *::after {
   line-height: 1.65;
   color: var(--text-dim);
   max-width: 300px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 @keyframes emptyFadeIn {
   from { opacity: 0; transform: translateY(8px); }
@@ -1225,19 +1224,33 @@ input[type='color']:focus-visible {
 }
 
 /* 半透明毛玻璃上提升文字边缘清晰度 */
-.tb-title,
-.group-title,
-.item-name,
-.item-meta,
-.log-text,
-.log-time,
-.chip,
-.btn,
-.progress-text,
-.statusbar,
-.preset-name,
-.field-row label {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+/* ============ 文字渲染 ============ */
+/* 历史遗留：这里以前是十来个元素各自写死一层深色投影（浅色模式还得再点名覆盖一遍
+   描边）。现在统一收敛到「容器设一次 + 靠继承」，渲染方式与强度都可在设置里调：
+   - 方式由 JS 写到 <html data-text-render>（auto 会被解析成 outline / shadow）
+   - 强度由 JS 算进 --text-outline / --text-shadow（强度 50 = 原来的观感）
+   好处：不会再出现"有的字有渲染、有的没有"，也不用维护两份元素清单。 */
+.glass-root,
+.toast-root {
+  text-shadow: var(--text-render, none);
+}
+html[data-text-render='none'] {
+  --text-render: none;
+}
+html[data-text-render='outline'] {
+  --text-render: var(--text-outline);
+}
+html[data-text-render='shadow'] {
+  --text-render: var(--text-shadow);
+}
+html[data-text-render='both'] {
+  --text-render: var(--text-outline), var(--text-shadow);
+}
+/* 关闭渲染时，通知卡片的多层阴影也一并关掉，否则"无"就名不副实 */
+html[data-text-render='none'] .toast-title,
+html[data-text-render='none'] .toast-body,
+html[data-text-render='none'] .toast-time {
+  text-shadow: none;
 }
 
 /* ============ 应用图标（列表） ============ */
@@ -1705,42 +1718,8 @@ input[type='color']:focus-visible {
 /* ============ 浅色模式适配 ============ */
 [data-theme='light'] {
   --toast-base: rgba(255, 255, 255, 0.82);
-  /* 浅色模式下玻璃偏亮、桌面底色不可控，文字改用「黑色描边」而不是投影：
-     八向极细描边能把字形轮廓钉住，在任意背景上都读得清。
-     （深色模式仍沿用深色投影，见上方 .tb-title… 那条 text-shadow 规则） */
-  --text-outline:
-    -1px -1px 0 rgba(0, 0, 0, 0.35),
-    0 -1px 0 rgba(0, 0, 0, 0.35),
-    1px -1px 0 rgba(0, 0, 0, 0.35),
-    -1px 0 0 rgba(0, 0, 0, 0.35),
-    1px 0 0 rgba(0, 0, 0, 0.35),
-    -1px 1px 0 rgba(0, 0, 0, 0.35),
-    0 1px 0 rgba(0, 0, 0, 0.35),
-    1px 1px 0 rgba(0, 0, 0, 0.35);
-}
-/* 浅色模式：文字统一改黑色描边（只动渲染方式，不改颜色/字号/间距）。
-   分两层写是有原因的：
-   1) 先在**容器**上设一次 —— text-shadow 会继承，窗口内所有文字默认就是描边；
-   2) 再点名覆盖下面这批元素 —— 它们在深色模式里各自声明过投影，
-      而"元素上直接声明的"永远压过"从父级继承来的"，不点名就会漏掉。 */
-[data-theme='light'] .glass-root,
-[data-theme='light'] .toast-root {
-  text-shadow: var(--text-outline);
-}
-[data-theme='light'] .tb-title,
-[data-theme='light'] .group-title,
-[data-theme='light'] .item-name,
-[data-theme='light'] .item-meta,
-[data-theme='light'] .log-text,
-[data-theme='light'] .log-time,
-[data-theme='light'] .chip,
-[data-theme='light'] .btn,
-[data-theme='light'] .progress-text,
-[data-theme='light'] .statusbar,
-[data-theme='light'] .preset-name,
-[data-theme='light'] .field-row label,
-[data-theme='light'] .empty-text {
-  text-shadow: var(--text-outline);
+  /* 文字渲染（描边/投影/强度）已挪到上方统一的「文字渲染」一节，
+     由 <html data-text-render> + JS 算出的两个变量驱动，这里不再逐个元素覆盖。 */
 }
 [data-theme='light'] .toast-close:hover {
   background: rgba(0, 0, 0, 0.08);
@@ -1809,11 +1788,12 @@ input[type='color']:focus-visible {
 [data-theme='light'] .toast-main {
   background: rgba(255, 255, 255, 0.22);
 }
-/* 浅色模式下通知卡片同样是「浅底深字」，原来的白色泛光会把字形糊开 —— 一并改黑色描边 */
+/* 通知卡片默认那套是深色模式的多层黑色泛光；浅色卡片是「浅底深字」，
+   照搬会把字形糊开 —— 浅色下改为跟随渲染设置（auto 即描边）。 */
 [data-theme='light'] .toast-title,
 [data-theme='light'] .toast-body,
 [data-theme='light'] .toast-time {
-  text-shadow: var(--text-outline);
+  text-shadow: var(--text-render, none);
 }
 [data-theme='light'] .toast-close:hover {
   background: rgba(0, 0, 0, 0.08);
