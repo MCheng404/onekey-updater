@@ -103,6 +103,13 @@ function syncThemeControls(): void {
   el('valOpacity').textContent = `${theme.opacity}%`;
   el('valRadius').textContent = `${theme.radius}px`;
 
+  // ⚠️ 这两行必须在这里：commitTheme() 只调 syncThemeControls()，
+  // 而「文字渲染」「窗口材质」是后加的两组按钮 —— 漏了同步的话，
+  // 点了以后效果虽然生效，但**没有任何一个选项会显示成选中**（用户看到的
+  // 就是"设置项没正确渲染"）。
+  syncTextRender();
+  syncMaterial();
+
   document.querySelectorAll<HTMLElement>('.preset').forEach((node) => {
     node.classList.toggle('active', node.dataset.preset === theme.presetId);
   });
