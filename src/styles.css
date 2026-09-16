@@ -1419,21 +1419,16 @@ html[data-text-render='none'] .toast-time {
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: 0.01em;
-  /* 多层文字发光：近处清晰阴影 + 中层模糊 + 远处泛光，确保任何背景上可读 */
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.9),
-    0 0 4px rgba(0, 0, 0, 0.7),
-    0 0 8px rgba(0, 0, 0, 0.5),
-    0 0 16px rgba(0, 0, 0, 0.3);
+  /* 原来这里是 4 层黑色发光（0.9/0.7/0.5/0.3），观感是"WordArt 式外发光"，
+     既丑又和窗口内的文字渲染不一致。现在统一走 --text-render ——
+     .toast-root 已经设好，这里不声明就会继承（跟主界面同一套、强度也可调）。 */
 }
 .toast-time {
   font-family: var(--font-mono);
   font-size: var(--t-3);
   color: var(--text-faint);
   flex: 0 0 auto;
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.8),
-    0 0 4px rgba(0, 0, 0, 0.5);
+  /* 同上：跟随 --text-render，不再写死发光 */
 }
 /* .toast-close 的样式已随关闭按钮一并移除：整张卡片就是关闭热区（见 notify.ts）。
    留着只会是永远匹配不到元素的死代码。 */
@@ -1446,11 +1441,7 @@ html[data-text-render='none'] .toast-time {
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-all;
-  /* 正文文字发光：比标题稍弱，保持层次感 */
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.85),
-    0 0 4px rgba(0, 0, 0, 0.6),
-    0 0 8px rgba(0, 0, 0, 0.35);
+  /* 同上：跟随 --text-render，不再写死发光 */
 }
 
 /* 通知位置指示 — 顶部时往下推进、底部时往上推进；
@@ -1762,18 +1753,16 @@ html[data-text-render='none'] .toast-time {
   box-shadow:
     0 12px 32px rgba(0, 0, 0, 0.15),
     0 2px 8px rgba(0, 0, 0, 0.08),
-    0 0 0 1px rgba(0, 0, 0, 0.06) inset,
-    /* 浅色模式内阴影：白色泛光，提升深色文字对比度 */
-    inset 0 0 32px rgba(255, 255, 255, 0.5),
-    inset 0 2px 8px rgba(255, 255, 255, 0.3);
+    0 0 0 1px rgba(0, 0, 0, 0.06) inset;
+    /* 这里原本还有两道白色内发光（inset 0 0 32px rgba(255,255,255,.5) 等）——
+       是"光泽"效果，既违背纯平约定、也没带来可读性（对比已由文字渲染设置负责）。 */
 }
 [data-theme='light'] .toast:hover {
   box-shadow:
     0 16px 40px rgba(0, 0, 0, 0.2),
     0 4px 12px rgba(0, 0, 0, 0.1),
-    0 0 0 1px rgba(0, 0, 0, 0.08) inset,
-    inset 0 0 36px rgba(255, 255, 255, 0.6),
-    inset 0 2px 8px rgba(255, 255, 255, 0.4);
+    0 0 0 1px rgba(0, 0, 0, 0.08) inset;
+    /* hover 也别加光泽：悬停只加深投影，保持纯平 */
 }
 /* 深色模式下 .toast-main 本来就没有底色（见上方注释：渐变违背纯平要求）。
    浅色这里原本补了个 90° 白色渐变蒙层，属于同一类"渐变" —— 改成纯平的一层薄白。 */
