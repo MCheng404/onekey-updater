@@ -71,6 +71,7 @@ const zhCN: Record<string, string> = {
   'action.ignoreVersion': '忽略此版本（版本更新后自动恢复）',
   'action.ignoreForever': '永久忽略（可在设置中移除）',
   'action.failedViewLog': '更新失败，点击查看运行日志',
+  'action.selectAllIn': '全选 {group}',
 
   // ---- 通知窗口 ----
   'notify.closeAria': '关闭通知',
@@ -237,6 +238,7 @@ const enUS: Record<string, string> = {
   'action.ignoreVersion': 'Ignore this version (auto-restored when a newer version appears)',
   'action.ignoreForever': 'Ignore forever (removable in Settings)',
   'action.failedViewLog': 'Update failed — click to view the log',
+  'action.selectAllIn': 'Select all {group}',
 
   // ---- Notification window ----
   'notify.closeAria': 'Dismiss notification',

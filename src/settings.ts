@@ -488,8 +488,11 @@ function syncNotifyControls(): void {
   });
   const mini = el<HTMLDivElement>('posMini');
   const posKey = POS_KEY[notify.position] ?? 'bottomRight';
+  const posName = t(`settings.pos.${posKey}`);
   mini.dataset.pos = notify.position;
-  mini.title = t(`settings.pos.${posKey}`); // 迷你示意图的悬停提示 = 当前位置名
+  mini.title = posName; // 悬停提示 = 当前位置名
+  // 唯一的"通知位置"入口，必须给出无障碍名称，否则读屏只念"分组"
+  mini.setAttribute('aria-label', `${t('settings.notifPosition')}: ${posName}`);
   el('posHint').textContent = posHint(notify.position);
 
   el<HTMLInputElement>('rangeNotifDuration').value = String(notify.durationMs);
@@ -523,6 +526,43 @@ function bindNotifyControls(): void {
 
   // 迷你绘制窗口：点击区域 → 选位置
   const mini = el<HTMLDivElement>('posMini');
+
+  // 键盘可达：这是设置"通知位置"的唯一入口，不能只支持鼠标。
+  // 方向键在 3×2 的落点里移动：左右切 left/center/right，上下切 top/bottom。
+  mini.tabIndex = 0;
+  mini.setAttribute('role', 'button');
+  mini.addEventListener('keydown', (e) => {
+    if (notify.mode !== 'app') return;
+    const [v, h] = notify.position.split('-');
+    const cols = ['left', 'center', 'right'];
+    let ci = cols.indexOf(h);
+    if (ci < 0) ci = 2;
+
+    let next: string | null = null;
+    switch (e.key) {
+      case 'ArrowLeft':
+        next = `${v}-${cols[Math.max(0, ci - 1)]}`;
+        break;
+      case 'ArrowRight':
+        next = `${v}-${cols[Math.min(2, ci + 1)]}`;
+        break;
+      case 'ArrowUp':
+        next = `top-${cols[ci]}`;
+        break;
+      case 'ArrowDown':
+        next = `bottom-${cols[ci]}`;
+        break;
+      default:
+        break;
+    }
+    if (!next) return;
+
+    e.preventDefault();
+    notify.position = next;
+    syncNotifyControls();
+    void commitNotify();
+  });
+
   mini.addEventListener('click', (e) => {
     if (notify.mode !== 'app') return;
     const rect = mini.getBoundingClientRect();

@@ -364,6 +364,11 @@ function buildGroup(
   const selInGroup = group.filter((i) => checked.has(i.id)).length;
   cb.checked = group.length > 0 && selInGroup === group.length;
   cb.indeterminate = selInGroup > 0 && selInGroup < group.length;
+  // 整组选中时给分组头一道主题色描边+光晕 —— CSS 里 .group.checked-glow 早就写好了，
+  // 但一直没人挂这个类，等于白写
+  wrap.classList.toggle('checked-glow', cb.checked);
+  // 复选框的 label 里只有视觉方块、没有文字，无障碍名称会是空的 → 显式补一个
+  cb.setAttribute('aria-label', t('action.selectAllIn', { group: sourceLabel(source) }));
   head.append(makeCheckbox(cb));
 
   const icon = document.createElement('span');
@@ -409,6 +414,8 @@ function buildItem(item: UpdateItem): HTMLElement {
   cb.dataset.role = 'item';
   cb.dataset.id = item.id;
   cb.checked = checked.has(item.id);
+  // 同上：label 只有方块没文字，补无障碍名称，否则读屏只能念出"复选框"
+  cb.setAttribute('aria-label', item.name);
 
   // 应用图标：有 PNG 用 PNG，否则退化到矢量
   const icon = document.createElement('div');
@@ -563,6 +570,8 @@ function syncGroupCheckbox(source: SourceKind) {
   const sel = group.filter((i) => checked.has(i.id)).length;
   cb.checked = group.length > 0 && sel === group.length;
   cb.indeterminate = sel > 0 && sel < group.length;
+  // 与 buildGroup 保持一致：整组选中才点亮分组头
+  cb.closest('.group')?.classList.toggle('checked-glow', cb.checked);
 }
 
 function syncItemsOfGroup(source: SourceKind) {

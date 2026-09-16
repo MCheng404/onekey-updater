@@ -1195,6 +1195,7 @@ input[type='range'] {
 .item-action-btn:focus-visible,
 .toast-close:focus-visible,
 .select-input:focus-visible,
+.pos-mini:focus-visible,
 input[type='range']:focus-visible,
 input[type='color']:focus-visible {
   outline: 2px solid var(--accent);
@@ -1444,17 +1445,17 @@ input[type='color']:focus-visible {
   height: 150px;
   margin: 8px 0 4px;
   border-radius: var(--radius-sm);
-  background:
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.04), transparent 60%),
-    var(--bg-sunken);
+  /* 原本这里叠了一层「顶部径向泛光」，属于光泽效果、违背纯平约定，去掉 */
+  background: var(--bg-sunken);
   border: 1px solid var(--line);
   overflow: hidden;
   cursor: crosshair;
 }
+/* 外框与十字准线都用主题变量，否则浅色模式下白线画在白底上 = 看不见 */
 .pos-mini-frame {
   position: absolute;
   inset: 8px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border: 1px dashed var(--line-strong);
   border-radius: var(--radius-xs);
 }
 .pos-mini::before {
@@ -1464,7 +1465,7 @@ input[type='color']:focus-visible {
   top: 8px;
   bottom: 8px;
   width: 1px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--line);
 }
 .pos-mini::after {
   content: '';
@@ -1473,7 +1474,7 @@ input[type='color']:focus-visible {
   left: 8px;
   right: 8px;
   height: 1px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--line);
 }
 .pos-dot {
   position: absolute;
@@ -1730,22 +1731,33 @@ input[type='color']:focus-visible {
   background: rgba(248, 113, 113, 0.15);
   color: var(--err);
 }
-[data-theme='light'] .pos-mini .screen {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.1);
-}
-[data-theme='light'] .pos-mini .dot {
+/* ⚠️ 这里原本写的是 `.pos-mini .screen` / `.pos-mini .dot` —— 这两个类名根本不存在
+   （真实类名是 .pos-mini-frame / .pos-dot），于是浅色模式下这个"通知位置示意图"
+   的样式整段失效：白色虚线框、白色十字线画在浅底上全看不见。
+   外框/十字线已改成主题变量（见上方基础规则），这里只保留圆点的浅色处理。 */
+[data-theme='light'] .pos-dot {
   background: var(--accent);
   box-shadow: 0 0 8px var(--accent-glow);
 }
 [data-theme='light'] .progress-bar {
   background: rgba(0, 0, 0, 0.08);
 }
-[data-theme='light'] .scrollbar::-webkit-scrollbar-thumb {
+/* 浅色模式滚动条：基础规则用的是**白色**拇指，在浅底上几乎看不见。
+   ⚠️ 这里必须列出真实容器类 —— 之前误写成 `.scrollbar`（这个类从未被任何元素使用），
+   等于浅色模式压根没适配过滚动条，肉眼只会觉得"滚动条时有时无"。 */
+[data-theme='light'] .list-scroll:hover::-webkit-scrollbar-thumb,
+[data-theme='light'] .log-body:hover::-webkit-scrollbar-thumb,
+[data-theme='light'] .settings-scroll:hover::-webkit-scrollbar-thumb,
+[data-theme='light'] .about-scroll:hover::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.15);
+  background-clip: padding-box;
 }
-[data-theme='light'] .scrollbar::-webkit-scrollbar-thumb:hover {
+[data-theme='light'] .list-scroll:hover::-webkit-scrollbar-thumb:hover,
+[data-theme='light'] .log-body:hover::-webkit-scrollbar-thumb:hover,
+[data-theme='light'] .settings-scroll:hover::-webkit-scrollbar-thumb:hover,
+[data-theme='light'] .about-scroll:hover::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.25);
+  background-clip: padding-box;
 }
 [data-theme='light'] .badge {
   background: rgba(0, 0, 0, 0.06);
@@ -1768,13 +1780,10 @@ input[type='color']:focus-visible {
     inset 0 0 36px rgba(255, 255, 255, 0.6),
     inset 0 2px 8px rgba(255, 255, 255, 0.4);
 }
+/* 深色模式下 .toast-main 本来就没有底色（见上方注释：渐变违背纯平要求）。
+   浅色这里原本补了个 90° 白色渐变蒙层，属于同一类"渐变" —— 改成纯平的一层薄白。 */
 [data-theme='light'] .toast-main {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.4) 0%,
-    rgba(255, 255, 255, 0.2) 50%,
-    transparent 100%
-  );
+  background: rgba(255, 255, 255, 0.22);
 }
 /* 浅色模式下通知卡片同样是「浅底深字」，原来的白色泛光会把字形糊开 —— 一并改黑色描边 */
 [data-theme='light'] .toast-title,
