@@ -89,6 +89,20 @@ const ROOT_PAD = 12;
  */
 const SIZE_SLACK = 4;
 
+/** 位移小于这个值仍算"点击"，避免手指轻微抖动就变成拖拽 */
+const DRAG_START_PX = 6;
+/**
+ * 惯性：把松手瞬间的速度（px/ms）折算成额外位移。
+ * 配合下面刻意很大的阻力（.toast-dismiss-fling 的缓动），实际只滑出很小一段就被刹住。
+ */
+const FLING_FACTOR = 55;
+/** 惯性位移上限，防止甩得太夸张 */
+const FLING_MAX = 110;
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(Math.max(v, lo), hi);
+}
+
 // ============ 状态 ============
 
 let root: HTMLElement | null = null;
@@ -232,15 +246,92 @@ function spawnToast(p: ToastPayload): void {
     removed: false,
   };
 
-  // 点卡片任意位置即关闭（唯一的关闭方式，所以无障碍上也要能键盘触发）
+  // 关闭方式：按下 → Q 弹变小并脱离固定位置；拖动 → 跟手；松开 → 视情况消失。
+  // 这是唯一的关闭方式，所以键盘也要能触发（见下方 keydown）。
   el.setAttribute('role', 'button');
   el.tabIndex = 0;
   el.setAttribute('aria-label', t('notify.dismissAria', { title: p.title }));
-  el.addEventListener('click', () => dismissToast(id));
+
+  let pressing = false;
+  let dragged = false;
+  let startX = 0;
+  let startY = 0;
+  let lastX = 0;
+  let lastY = 0;
+  let lastT = 0;
+  let velX = 0;
+  let velY = 0;
+
+  const offset = (axis: 'dx' | 'dy'): number =>
+    parseFloat(el.style.getPropertyValue(`--${axis}`)) || 0;
+
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    pressing = true;
+    dragged = false;
+    startX = lastX = e.clientX;
+    startY = lastY = e.clientY;
+    lastT = performance.now();
+    velX = velY = 0;
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('toast-pressed'); // Q 弹变小
+  });
+
+  el.addEventListener('pointermove', (e) => {
+    if (!pressing) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    // 小于阈值仍算"点击"，避免手抖就变成拖拽
+    if (!dragged && Math.hypot(dx, dy) > DRAG_START_PX) dragged = true;
+    if (!dragged) return;
+
+    const now = performance.now();
+    const dt = Math.max(now - lastT, 1);
+    velX = (e.clientX - lastX) / dt; // px/ms
+    velY = (e.clientY - lastY) / dt;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    lastT = now;
+
+    // 脱离列表定位（CSS 里会同时 animation: none，否则入场动画的 fill 会盖掉 transform）
+    el.classList.add('toast-free');
+    el.style.setProperty('--dx', `${dx}px`);
+    el.style.setProperty('--dy', `${dy}px`);
+  });
+
+  const finishDrag = (e: PointerEvent) => {
+    if (!pressing) return;
+    pressing = false;
+    el.classList.remove('toast-pressed');
+    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+
+    if (!dragged) {
+      // 鼠标没动就松开：原地消失
+      el.classList.add('toast-dismiss-inplace');
+      window.setTimeout(() => dismissToast(id, /* immediate */ true), 170);
+      return;
+    }
+
+    // 移动过：带上惯性再走一小段，同时淡出。
+    // 阻力刻意做得非常大 —— 只滑出一点就被刹住，不会飞出屏幕。
+    const flingX = clamp(velX * FLING_FACTOR, -FLING_MAX, FLING_MAX);
+    const flingY = clamp(velY * FLING_FACTOR, -FLING_MAX, FLING_MAX);
+    el.style.setProperty('--dx', `${offset('dx') + flingX}px`);
+    el.style.setProperty('--dy', `${offset('dy') + flingY}px`);
+    el.classList.add('toast-dismiss-fling');
+    window.setTimeout(() => dismissToast(id, /* immediate */ true), 430);
+  };
+  el.addEventListener('pointerup', finishDrag);
+  el.addEventListener('pointercancel', () => {
+    pressing = false;
+    el.classList.remove('toast-pressed');
+  });
+
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      dismissToast(id);
+      el.classList.add('toast-dismiss-inplace');
+      window.setTimeout(() => dismissToast(id, /* immediate */ true), 170);
     }
   });
 

@@ -1387,6 +1387,40 @@ html[data-text-render='none'] .toast-time {
   }
 }
 
+/* ---------- 按下 / 拖拽关闭 ---------- */
+/* ⚠️ 入场动画 toastIn 是 `animation: … both`，终态的 `transform: none` 会盖掉下面
+   这些 transform —— 表现为"完全拖不动"。所以凡是改 transform 的状态都必须 animation: none。 */
+.toast {
+  transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(var(--toast-scale, 1));
+  transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s var(--ease);
+}
+/* 按下：Q 弹变小（曲线末尾的那点过冲就是"Q 弹"的来源） */
+.toast-pressed {
+  animation: none;
+  --toast-scale: 0.94;
+  cursor: grabbing;
+}
+/* 拖拽中：过渡必须去掉，否则跟手会拖泥带水 */
+.toast-free {
+  animation: none;
+  transition: none;
+  cursor: grabbing;
+  z-index: 20;
+}
+/* 没移动就松手：原地缩一下消失 */
+.toast-dismiss-inplace {
+  animation: none;
+  --toast-scale: 0.88;
+  opacity: 0;
+  transition: transform 0.17s var(--ease), opacity 0.17s var(--ease);
+}
+/* 移动后松手：带着惯性再走一小段 —— 阻力刻意开得很大，很快刹住，同时淡出 */
+.toast-dismiss-fling {
+  animation: none;
+  opacity: 0;
+  transition: transform 0.43s cubic-bezier(0.06, 0.9, 0.16, 1), opacity 0.4s ease-in;
+}
+
 .toast-stripe {
   width: 3px;
   flex: 0 0 3px;
