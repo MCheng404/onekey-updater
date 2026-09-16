@@ -79,6 +79,16 @@ const HIDE_DELAY_MS = 360;
 const TOAST_GAP = 8;
 const ROOT_PAD = 12;
 
+/**
+ * 尺寸容差（逻辑 px）。
+ *
+ * 窗口必须贴合内容（透明留白会拦截鼠标点击），但**贴合到像素级反而会被裁**：
+ * 实测高度是各卡 `offsetHeight` 之和，非整数缩放下的亚像素取整、以及卡片自带的
+ * 描边/阴影，都会让真实绘制范围比这个和大 1~2px —— 结果最后一张卡的下边缘被切掉。
+ * 给几像素余量，肉眼无感，裁切彻底消失。
+ */
+const SIZE_SLACK = 4;
+
 // ============ 状态 ============
 
 let root: HTMLElement | null = null;
@@ -111,16 +121,41 @@ function applyPrefs(): void {
 /**
  * 把通知窗口的尺寸/位置同步给 Rust 端。
  *
- * 窗口透明留白同样会拦截鼠标点击，因此窗口必须与内容等高：
- * 这里实测所有 toast 的高度总和 + 间距 + 内边距，交给 Rust 换算物理像素。
+ * 窗口透明留白同样会拦截鼠标点击，因此窗口必须**贴合**内容：
+ * 这里实测所有 toast 的高度总和 + 间距 + 内边距 + 容差，交给 Rust 换算物理像素。
  */
 function syncWindowSize(): void {
   if (!root) return;
   const toasts = Array.from(root.querySelectorAll<HTMLElement>('.toast'));
   if (toasts.length === 0) return;
   const sum = toasts.reduce((s, el) => s + el.offsetHeight, 0);
-  const height = sum + TOAST_GAP * (toasts.length - 1) + ROOT_PAD * 2;
+  const height = sum + TOAST_GAP * (toasts.length - 1) + ROOT_PAD * 2 + SIZE_SLACK;
   void invoke('layout_notify', { height }).catch(() => undefined);
+}
+
+/**
+ * 让窗口尺寸**跟随内容自动变化**，而不是只在增删通知时算一次。
+ *
+ * 以前只在 add / dismiss 时同步一次，于是这些情况会让窗口与内容对不上：
+ * 字体延迟加载完成（行高变了）、正文换行数变化、系统缩放或字体档位变化
+ * —— 高度变了而窗口没变，要么裁掉内容，要么多出透明留白挡住背后的点击。
+ * ResizeObserver 盯着根容器与每一张卡，尺寸一变就重新同步。
+ */
+let sizeObserver: ResizeObserver | null = null;
+
+function watchContentSize(): void {
+  if (!root) return;
+  if (!sizeObserver) {
+    sizeObserver = new ResizeObserver(() => syncWindowSize());
+    sizeObserver.observe(root);
+  }
+  // 根容器的高度是子元素撑开的，所以新加的卡也要单独盯住
+  root.querySelectorAll<HTMLElement>('.toast').forEach((el) => {
+    if (!el.dataset.sizeObserved) {
+      el.dataset.sizeObserved = '1';
+      sizeObserver?.observe(el);
+    }
+  });
 }
 
 // ============ Toast DOM 构建 ============
@@ -232,7 +267,11 @@ function spawnToast(p: ToastPayload): void {
   void win?.show().catch(() => undefined);
 
   // 等新节点完成布局后再测量高度，避免读到 0
-  requestAnimationFrame(() => syncWindowSize());
+  requestAnimationFrame(() => {
+    syncWindowSize();
+    // 新卡片也要纳入尺寸观察，之后它换行/字体加载导致高度变化都会自动跟随
+    watchContentSize();
+  });
 }
 
 function dismissToast(id: number, immediate = false): void {
@@ -276,7 +315,11 @@ async function setupListeners(): Promise<void> {
       prefs = e.payload;
       applyPrefs();
       // 位置/堆叠方向变化后重新校正窗口
-      requestAnimationFrame(() => syncWindowSize());
+      requestAnimationFrame(() => {
+    syncWindowSize();
+    // 新卡片也要纳入尺寸观察，之后它换行/字体加载导致高度变化都会自动跟随
+    watchContentSize();
+  });
     });
     unlisteners.push(unlisten);
   } catch (e) {
