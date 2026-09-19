@@ -40,7 +40,12 @@
      原来那 4~5 层暗色 inset 叠起来会把卡片糊成一块黑底，且完全不跟随主题。 */
   --toast-shadow: 0 12px 32px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.2);
   --toast-shadow-hover: 0 16px 40px rgba(0, 0, 0, 0.48), 0 4px 12px rgba(0, 0, 0, 0.26);
-  /* 旧的 --toast-base 已删除：定义了深/浅两份，但没有任何规则引用它（死代码）。
+  /* 通知卡片的"实底"。⚠️ **不能删** —— notify.ts 是内联使用它的：
+       background = linear-gradient(tint,tint), linear-gradient(base,base)。
+     它不在 CSS 规则里出现，所以只 grep 样式表会误判成死代码（我犯过这个错）。
+     存在的理由：窗口选"无材质"时没有任何 DWM 兜底，若用近乎透明的 --bg-card，
+     卡片在浅色桌面上几乎看不见，只剩一圈 1px 描边。深浅色各一套，见下方浅色块。 */
+  --toast-base: rgba(20, 23, 29, 0.88);
   /* Toast 卡片底色。
      通知窗口是**纯透明**的：既不能设 backgroundColor（会渲染成不透明白/黑底），
      也不能开 acrylic（材质铺满整个窗口矩形，比卡片宽就在左右各露一条）。
@@ -1769,6 +1774,8 @@ html[data-text-render='none'] .toast-time {
 [data-theme='light'] {
   --toast-shadow: 0 10px 26px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.08);
   --toast-shadow-hover: 0 14px 34px rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.1);
+  /* 浅色底：接近实心白，保证卡片在任何桌面内容上都立得住 */
+  --toast-base: rgba(250, 251, 253, 0.94);
   /* 文字渲染（描边/投影/强度）已挪到上方统一的「文字渲染」一节，
      由 <html data-text-render> + JS 算出的两个变量驱动，这里不再逐个元素覆盖。 */
 }
