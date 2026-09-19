@@ -91,7 +91,6 @@
   --radius: var(--radius-base);
   --radius-sm: calc(var(--radius-base) * 0.62);
   --radius-xs: calc(var(--radius-base) * 0.4);
-  --radius-lg: calc(var(--radius-base) * 1.4);
 
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }

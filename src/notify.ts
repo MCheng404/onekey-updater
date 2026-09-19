@@ -142,8 +142,10 @@ function alignFor(pos: string): 'align-left' | 'align-right' | 'align-center' {
 const STACK_PEEK = 14;
 
 function applyPrefs(): void {
-  document.documentElement.style.setProperty('--notif-position', prefs.position);
   document.documentElement.style.setProperty('--notif-opacity', String(prefs.opacity / 100));
+  // --stack-peek 是叠加模式卡片的层间步长：CSS 读它、TS 定值，
+  // 这样「窗口高度测算」与「实际位移」共用一个真值来源，不会各写一份数字。
+  document.documentElement.style.setProperty('--stack-peek', `${STACK_PEEK}px`);
   if (root) {
     const stacked = prefs.stack === 'stacked' ? ' stacked' : '';
     root.className =
