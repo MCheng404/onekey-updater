@@ -42,6 +42,7 @@ interface NotifyPrefs {
   durationMs: number;
   opacity: number;
   maxStack: number;
+  stack: string;
 }
 
 const DEFAULT_NOTIFY: NotifyPrefs = {
@@ -50,6 +51,7 @@ const DEFAULT_NOTIFY: NotifyPrefs = {
   durationMs: 4500,
   opacity: 90,
   maxStack: 4,
+  stack: 'list',
 };
 
 let theme: ThemeState = loadTheme();

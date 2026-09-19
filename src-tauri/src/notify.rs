@@ -25,6 +25,7 @@ pub fn default_prefs() -> NotifyPrefs {
         duration_ms: 4500,
         opacity: 90,
         max_stack: 4,
+        stack: "list".to_string(),
     }
 }
 

@@ -1330,6 +1330,37 @@ html[data-text-render='none'] .toast-time {
   --toast-in-x: 0px;
 }
 
+/* ---------- 叠加模式（扑克牌式） ---------- */
+/* 卡片脱离列表、彼此重叠：最新的贴在定位边，旧的往另一侧让开一点，
+   于是每条旧卡都只露出上边缘的一条 —— 既看得出"还有几条"，又能看到下面的内容。
+   深度由 JS 写在 --depth 上（0 = 最新、在最上层）。 */
+.toast-root.stacked {
+  position: relative;
+}
+.toast-root.stacked .toast {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: calc(50 - var(--depth, 0));
+  opacity: calc(1 - var(--depth, 0) * 0.12);
+  transform: rotate(var(--tilt, 0deg)) scale(calc(1 - var(--depth, 0) * 0.022));
+}
+/* 纵向堆叠方向跟随通知位置：底部的往上叠、顶部的往下叠 */
+.toast-root.stacked.dir-bottom-up .toast {
+  bottom: calc(var(--depth, 0) * var(--stack-peek, 14px));
+}
+.toast-root.stacked.dir-top-down .toast {
+  top: calc(var(--depth, 0) * var(--stack-peek, 14px));
+}
+/* ⚠️ 旋转按 DOM 序定死，**不要**写成跟着 --depth 走 ——
+   否则每来一条新通知，已有卡片会集体重新倾斜，整叠都在晃。 */
+.toast-root.stacked .toast:nth-child(odd) {
+  --tilt: -1.5deg;
+}
+.toast-root.stacked .toast:nth-child(even) {
+  --tilt: 1.5deg;
+}
+
 .toast {
   pointer-events: auto;
   display: flex;

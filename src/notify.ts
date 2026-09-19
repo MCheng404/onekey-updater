@@ -26,6 +26,8 @@ interface NotifyPrefs {
   durationMs: number;
   opacity: number;
   maxStack: number;
+  /** 多条通知排布：list（列表）/ stacked（卡片叠加） */
+  stack: string;
 }
 
 interface ToastPayload {
@@ -71,6 +73,7 @@ const DEFAULT_PREFS: NotifyPrefs = {
   durationMs: 4500,
   opacity: 90,
   maxStack: 4,
+  stack: 'list',
 };
 
 const EXIT_ANIM_MS = 280;
@@ -135,12 +138,30 @@ function alignFor(pos: string): 'align-left' | 'align-right' | 'align-center' {
   return 'align-center';
 }
 
+/** 叠加模式下每张卡露出的高度（逻辑 px） */
+const STACK_PEEK = 14;
+
 function applyPrefs(): void {
   document.documentElement.style.setProperty('--notif-position', prefs.position);
   document.documentElement.style.setProperty('--notif-opacity', String(prefs.opacity / 100));
   if (root) {
-    root.className = `toast-root dir-${directionFor(prefs.position)} ${alignFor(prefs.position)}`;
+    const stacked = prefs.stack === 'stacked' ? ' stacked' : '';
+    root.className =
+      `toast-root dir-${directionFor(prefs.position)} ${alignFor(prefs.position)}${stacked}`;
   }
+}
+
+/**
+ * 叠加模式：给每张卡写"深度"（0 = 最新、在最上层）。
+ * 列表模式下也会归零，这样切回列表时不会残留上一轮的旋转与缩放。
+ */
+function syncDepths(): void {
+  if (!root) return;
+  const cards = Array.from(root.querySelectorAll<HTMLElement>('.toast'));
+  // DOM 里最后一张是最新的（stack 末尾 push），所以深度要倒着数
+  cards.forEach((card, i) => {
+    card.style.setProperty('--depth', String(cards.length - 1 - i));
+  });
 }
 
 /**
@@ -153,8 +174,14 @@ function syncWindowSize(reserve = 0): void {
   if (!root) return;
   const toasts = Array.from(root.querySelectorAll<HTMLElement>('.toast'));
   if (toasts.length === 0) return;
-  const sum = toasts.reduce((s, el) => s + el.offsetHeight, 0);
-  const height = sum + TOAST_GAP * (toasts.length - 1) + ROOT_PAD * 2 + SIZE_SLACK;
+  // ⚠️ 叠加模式下整叠的高度**不是**各卡之和 —— 卡片互相重叠，多一张只多露出 PEEK。
+  // 沿用"求和"会让窗口多出一大片透明区，把背后的点击全挡住（本项目最易踩的坑）。
+  const stacked = root.classList.contains('stacked');
+  const height = stacked
+    ? toasts[toasts.length - 1].offsetHeight + STACK_PEEK * (toasts.length - 1) +
+      ROOT_PAD * 2 + SIZE_SLACK
+    : toasts.reduce((s, el) => s + el.offsetHeight, 0) +
+      TOAST_GAP * (toasts.length - 1) + ROOT_PAD * 2 + SIZE_SLACK;
   void invoke('layout_notify', { height, reserve }).catch(() => undefined);
 }
 
@@ -388,6 +415,7 @@ function spawnToast(p: ToastPayload): void {
 
   // 等新节点完成布局后再测量高度，避免读到 0
   requestAnimationFrame(() => {
+    syncDepths(); // 叠加模式靠它决定每张卡的位置/旋转/层级
     syncWindowSize();
     // 新卡片也要纳入尺寸观察，之后它换行/字体加载导致高度变化都会自动跟随
     watchContentSize();
@@ -436,6 +464,7 @@ async function setupListeners(): Promise<void> {
       applyPrefs();
       // 位置/堆叠方向变化后重新校正窗口
       requestAnimationFrame(() => {
+    syncDepths(); // 叠加模式靠它决定每张卡的位置/旋转/层级
     syncWindowSize();
     // 新卡片也要纳入尺寸观察，之后它换行/字体加载导致高度变化都会自动跟随
     watchContentSize();

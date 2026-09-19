@@ -67,6 +67,13 @@ pub struct NotifyPrefs {
     pub duration_ms: u32,
     pub opacity: u8,
     pub max_stack: u8,
+    /// 多条通知的排布：list（列表，默认）/ stacked（卡片叠加）
+    #[serde(default = "default_stack")]
+    pub stack: String,
+}
+
+fn default_stack() -> String {
+    "list".into()
 }
 
 /// 环境探测结果
