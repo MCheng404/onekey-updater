@@ -341,12 +341,12 @@ async fn send_notification(
 /// 由通知窗口前端在每次 toast 增删后调用：`height` 是前端实测的内容高度
 /// （CSS px）。窗口必须与内容等高，否则透明留白会拦截鼠标事件。
 #[tauri::command]
-async fn layout_notify(app: AppHandle, height: f64, reserve: Option<f64>) -> Result<(), String> {
+async fn layout_notify(app: AppHandle, height: f64) -> Result<(), String> {
     let Some(window) = app.get_webview_window("notify") else {
         return Ok(());
     };
     let prefs = notify::load_prefs(&app);
-    notify::layout(&window, &prefs.position, height, reserve.unwrap_or(0.0))
+    notify::layout(&window, &prefs.position, height)
 }
 
 /// 持久化通知偏好

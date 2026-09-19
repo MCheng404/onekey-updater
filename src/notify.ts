@@ -92,30 +92,6 @@ const ROOT_PAD = 12;
  */
 const SIZE_SLACK = 4;
 
-/** 位移小于这个值仍算"点击"，避免手指轻微抖动就变成拖拽 */
-const DRAG_START_PX = 6;
-/**
- * 惯性：把松手瞬间的速度（px/ms）折算成额外位移。
- * 配合下面刻意很大的阻力（.toast-dismiss-fling 的缓动），实际只滑出很小一段就被刹住。
- */
-const FLING_FACTOR = 55;
-/** 惯性位移上限，防止甩得太夸张 */
-const FLING_MAX = 110;
-/**
- * 拖拽期间给窗口临时留出的活动空间（逻辑 px）。
- *
- * 不这么做的话，卡片一移动就会被窗口边界裁掉，手感就是"完全拖不动"。
- * 240 够横向/纵向随手拖一段；只在按住并真正拖动时生效，松手立即归零，
- * 所以不会长期留下一大片挡鼠标的透明区域。
- */
-const DRAG_RESERVE = 240;
-
-/** 当前窗口是否已按拖拽放大（用于松手后归零，避免重复调用） */
-let windowReserved = false;
-
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.min(Math.max(v, lo), hi);
-}
 
 // ============ 状态 ============
 
@@ -172,7 +148,7 @@ function syncDepths(): void {
  * 窗口透明留白同样会拦截鼠标点击，因此窗口必须**贴合**内容：
  * 这里实测所有 toast 的高度总和 + 间距 + 内边距 + 容差，交给 Rust 换算物理像素。
  */
-function syncWindowSize(reserve = 0): void {
+function syncWindowSize(): void {
   if (!root) return;
   const toasts = Array.from(root.querySelectorAll<HTMLElement>('.toast'));
   if (toasts.length === 0) return;
@@ -184,7 +160,7 @@ function syncWindowSize(reserve = 0): void {
       ROOT_PAD * 2 + SIZE_SLACK
     : toasts.reduce((s, el) => s + el.offsetHeight, 0) +
       TOAST_GAP * (toasts.length - 1) + ROOT_PAD * 2 + SIZE_SLACK;
-  void invoke('layout_notify', { height, reserve }).catch(() => undefined);
+  void invoke('layout_notify', { height }).catch(() => undefined);
 }
 
 /**
@@ -286,110 +262,17 @@ function spawnToast(p: ToastPayload): void {
     removed: false,
   };
 
-  // 关闭方式：按下 → Q 弹变小并脱离固定位置；拖动 → 跟手；松开 → 视情况消失。
-  // 这是唯一的关闭方式，所以键盘也要能触发（见下方 keydown）。
+  // 关闭方式：点击卡片任意位置。它是唯一的关闭方式，所以键盘也要能触发。
+  // （曾尝试"按下拖动 + 松手甩出"，因窗口裁剪与 hover 覆盖 transform 两处
+  //   相互纠缠而移除；若再做，改用 Tauri 的 startDragging 让系统拖窗口本身。）
   el.setAttribute('role', 'button');
   el.tabIndex = 0;
   el.setAttribute('aria-label', t('notify.dismissAria', { title: p.title }));
-
-  let pressing = false;
-  let dragged = false;
-  let startX = 0;
-  let startY = 0;
-  let lastX = 0;
-  let lastY = 0;
-  let lastT = 0;
-  let velX = 0;
-  let velY = 0;
-
-  const offset = (axis: 'dx' | 'dy'): number =>
-    parseFloat(el.style.getPropertyValue(`--${axis}`)) || 0;
-
-  el.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
-    pressing = true;
-    dragged = false;
-    startX = lastX = e.clientX;
-    startY = lastY = e.clientY;
-    lastT = performance.now();
-    velX = velY = 0;
-    el.setPointerCapture(e.pointerId);
-    el.classList.add('toast-pressed'); // Q 弹变小
-  });
-
-  el.addEventListener('pointermove', (e) => {
-    if (!pressing) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    // 小于阈值仍算"点击"，避免手抖就变成拖拽
-    if (!dragged && Math.hypot(dx, dy) > DRAG_START_PX) dragged = true;
-    if (!dragged) return;
-
-    const now = performance.now();
-    const dt = Math.max(now - lastT, 1);
-    velX = (e.clientX - lastX) / dt; // px/ms
-    velY = (e.clientY - lastY) / dt;
-    lastX = e.clientX;
-    lastY = e.clientY;
-    lastT = now;
-
-    // 脱离列表定位（CSS 里会同时 animation: none，否则入场动画的 fill 会盖掉 transform）。
-    // 同时把窗口临时撑大 —— 否则卡片一移动就被窗口边界裁掉，手感就是"拖不动"。
-    el.classList.add('toast-free');
-    if (!windowReserved) {
-      windowReserved = true;
-      syncWindowSize(DRAG_RESERVE);
-    }
-    el.style.setProperty('--dx', `${dx}px`);
-    el.style.setProperty('--dy', `${dy}px`);
-  });
-
-  const finishDrag = (e: PointerEvent) => {
-    if (!pressing) return;
-    pressing = false;
-    el.classList.remove('toast-pressed');
-    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
-    // 松手就把窗口缩回去（卡片马上要消失了，不需要再留活动空间）
-    if (windowReserved) {
-      windowReserved = false;
-      syncWindowSize();
-    }
-
-    if (!dragged) {
-      // 鼠标没动就松开：原地消失
-      el.classList.add('toast-dismiss-inplace');
-      window.setTimeout(() => dismissToast(id, /* immediate */ true), 170);
-      return;
-    }
-
-    // 移动过：带上惯性再走一小段，同时淡出。
-    // 阻力刻意做得非常大 —— 只滑出一点就被刹住，不会飞出屏幕。
-    const flingX = clamp(velX * FLING_FACTOR, -FLING_MAX, FLING_MAX);
-    const flingY = clamp(velY * FLING_FACTOR, -FLING_MAX, FLING_MAX);
-    el.style.setProperty('--dx', `${offset('dx') + flingX}px`);
-    el.style.setProperty('--dy', `${offset('dy') + flingY}px`);
-    el.classList.add('toast-dismiss-fling');
-    window.setTimeout(() => dismissToast(id, /* immediate */ true), 430);
-  };
-  el.addEventListener('pointerup', finishDrag);
-  el.addEventListener('pointercancel', () => {
-    pressing = false;
-    dragged = false;
-    el.classList.remove('toast-pressed');
-    el.classList.remove('toast-free');
-    el.style.setProperty('--dx', '0px');
-    el.style.setProperty('--dy', '0px');
-    if (windowReserved) {
-      windowReserved = false;
-      syncWindowSize();
-    }
-  });
-
+  el.addEventListener('click', () => dismissToast(id));
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      el.classList.add('toast-dismiss-inplace');
-      window.setTimeout(() => dismissToast(id, /* immediate */ true), 170);
+      dismissToast(id);
     }
   });
 
