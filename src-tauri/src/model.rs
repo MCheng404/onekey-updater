@@ -85,6 +85,10 @@ pub struct EnvStatus {
     pub pip: bool,
     pub openclaw: bool,
     pub is_admin: bool,
+    /// 当前 PATH 上 `node -v` 的版本（形如 "26.4.0"）；没装则为 None
+    pub node_version: Option<String>,
+    /// 该版本是否满足 OpenClaw 的要求
+    pub node_ok: bool,
 }
 
 /// 推送给前端的日志行

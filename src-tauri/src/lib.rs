@@ -40,12 +40,23 @@ fn emit_log(app: &AppHandle, level: &str, text: impl Into<String>) {
 /// 中执行，否则同步 command 在某些系统配置下会阻塞事件循环。
 #[tauri::command]
 async fn detect_env() -> Result<EnvStatus, String> {
-    tauri::async_runtime::spawn_blocking(|| EnvStatus {
-        npm: util::cmd_exists("npm"),
-        winget: util::cmd_exists("winget"),
-        pip: util::cmd_exists("pip"),
-        openclaw: util::cmd_exists("openclaw"),
-        is_admin: util::is_admin(),
+    tauri::async_runtime::spawn_blocking(|| {
+        // Node 版本决定 OpenClaw 装不装得上（要求 >=24.16 <25 || >=26.1）。
+        // 此前 app 对它一无所知，用户只能从 npm 的一堆输出里猜。
+        let node_version = util::node_version();
+        let node_ok = node_version
+            .as_deref()
+            .map(util::node_satisfies_openclaw)
+            .unwrap_or(false);
+        EnvStatus {
+            npm: util::cmd_exists("npm"),
+            winget: util::cmd_exists("winget"),
+            pip: util::cmd_exists("pip"),
+            openclaw: util::cmd_exists("openclaw"),
+            is_admin: util::is_admin(),
+            node_version,
+            node_ok,
+        }
     })
     .await
     .map_err(|e| e.to_string())

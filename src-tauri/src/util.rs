@@ -421,3 +421,35 @@ where
     }
     result
 }
+
+/// 当前 PATH 上 node 的版本号（去掉前缀 v），没装返回 None。
+pub fn node_version() -> Option<String> {
+    let raw = run_capture_with_timeout("node", &["-v"], 10).ok()?;
+    let v = raw.trim().trim_start_matches('v').trim().to_string();
+    if v.is_empty() {
+        None
+    } else {
+        Some(v)
+    }
+}
+
+/// 该 Node 版本是否满足 OpenClaw 的要求。
+///
+/// 区间不是猜的 —— 是 openclaw 自己的 preinstall 守卫打印出来的原文：
+/// `this OpenClaw release requires Node >=24.16.0 <25 || >=26.1.0.`
+/// （25.x 被明确排除；26.x 要 >= 26.1）
+///
+/// 放进 app 是为了**提前把话说明白**：让用户在界面上看到「Node 版本过低」，
+/// 而不是让 npm 抛一堆守卫报错和 ENOENT，完全看不出问题在哪。
+pub fn node_satisfies_openclaw(v: &str) -> bool {
+    let mut it = v.split('.').filter_map(|p| p.parse::<u32>().ok());
+    let (Some(major), Some(minor)) = (it.next(), it.next()) else {
+        return false;
+    };
+    match major {
+        24 => minor >= 16,
+        26 => minor >= 1,
+        m if m >= 27 => true,
+        _ => false, // <24 与 25.x 都不满足
+    }
+}

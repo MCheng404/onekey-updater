@@ -35,6 +35,10 @@ interface EnvStatus {
   pip: boolean;
   openclaw: boolean;
   isAdmin: boolean;
+  /** 当前 PATH 上 node 的版本（形如 "26.4.0"），没装为 null */
+  nodeVersion: string | null;
+  /** 是否满足 OpenClaw 的要求（>=24.16 <25 || >=26.1）*/
+  nodeOk: boolean;
 }
 
 interface LogLine {
@@ -270,6 +274,19 @@ function renderEnv(env: EnvStatus) {
     const chip = document.createElement('span');
     chip.className = `chip ${ok ? 'on' : 'off'}`;
     chip.textContent = t(ok ? 'env.ready' : 'env.missing', { name });
+    box.append(chip);
+  }
+
+  // Node 单独一条：它是 OpenClaw 的**硬前置条件**（要求 >=24.16 <25 || >=26.1）。
+  // 版本不够时必须由 app 主动说出来 —— 否则用户只能从 npm 的一堆守卫报错和
+  // ENOENT 里去猜，这正是上次排查花掉大半天的原因。
+  if (env.nodeVersion) {
+    const chip = document.createElement('span');
+    chip.className = `chip ${env.nodeOk ? 'on' : 'off'}`;
+    chip.textContent = t(env.nodeOk ? 'env.nodeReady' : 'env.nodeOld', {
+      version: env.nodeVersion,
+    });
+    if (!env.nodeOk) chip.title = t('env.nodeHint');
     box.append(chip);
   }
 
