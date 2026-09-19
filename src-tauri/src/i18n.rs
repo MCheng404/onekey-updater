@@ -232,6 +232,11 @@ static TABLE: &[(&str, &str, &str)] = &[
     ),
     ("openclaw.restarting", "正在重启 gateway...", "Restarting the gateway..."),
     ("openclaw.done", "OpenClaw 更新完成（{}）", "OpenClaw updated ({})"),
+    (
+        "openclaw.gatewayFailed",
+        "{} 已安装，但 gateway 未能重启（端口可能被占用），请手动执行 openclaw gateway install --force",
+        "{} installed, but the gateway did not restart (the port may be in use). Run openclaw gateway install --force manually.",
+    ),
     ("openclaw.failed", "OpenClaw 更新失败", "OpenClaw update failed"),
     (
         "openclaw.adminHint",

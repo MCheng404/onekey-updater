@@ -98,21 +98,48 @@ impl UpdateSource for OpenclawSource {
         }
 
         let pkg_spec = format!("openclaw@{}", tag);
-        let code = run_stream("npm", &["i", "-g", &pkg_spec], |line| {
-            log("cmd", line.to_string());
-        });
+        // ⚠️ 必须显式放行安装脚本。新版 npm 默认拦截 install scripts，而 openclaw 的
+        // postinstall（装 bundled plugins）与几个原生依赖（koffi / tree-sitter-bash）
+        // 全靠它 —— 不放行的话包"装上了"但不完整，gateway 也起不来。
+        // 这份清单就是 npm 自己在警告里给出的那串。
+        let code = run_stream(
+            "npm",
+            &[
+                "i",
+                "-g",
+                &pkg_spec,
+                "--allow-scripts=openclaw,@google/genai,koffi,tree-sitter-bash,protobufjs",
+            ],
+            |line| {
+                log("cmd", line.to_string());
+            },
+        );
 
         match code {
             Ok(0) => {
                 log("info", tr!("openclaw.reinstall"));
-                let _ = run_stream("openclaw", &["gateway", "install", "--force"], |line| {
+                // 网关这两步都要看返回值：原来用 `let _ =` 丢掉结果，然后无条件报
+                // "更新完成" —— 日志一片 OK，实际上 gateway 是挂的，用户完全被骗。
+                // 另外 stop/restart 都要带 --force，否则它会拒绝停掉正在运行的 gateway，
+                // 旧进程继续占着端口，新的就起不来。
+                let install_ok = run_stream("openclaw", &["gateway", "install", "--force"], |line| {
                     log("cmd", line.to_string());
-                });
+                })
+                .map(|c| c == 0)
+                .unwrap_or(false);
+
                 log("info", tr!("openclaw.restarting"));
-                let _ = run_stream("openclaw", &["gateway", "restart"], |line| {
+                let restart_ok = run_stream("openclaw", &["gateway", "restart", "--force"], |line| {
                     log("cmd", line.to_string());
-                });
-                log("ok", tr!("openclaw.done", tag));
+                })
+                .map(|c| c == 0)
+                .unwrap_or(false);
+
+                if install_ok && restart_ok {
+                    log("ok", tr!("openclaw.done", tag));
+                } else {
+                    log("warn", tr!("openclaw.gatewayFailed", tag));
+                }
                 true
             }
             _ => {
