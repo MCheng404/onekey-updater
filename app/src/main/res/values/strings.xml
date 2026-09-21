@@ -184,4 +184,19 @@
     // Tencent MyApp source
     <string name="source_tencent">Tencent MyApp</string>
     <string name="source_tencent_summary">Queried package by package (the API has no batch mode), limited to 80 apps per scan with concurrency capped at 4.</string>
+
+    // Diagnostics optimize button
+    <string name="diagnostics_optimize">Optimize lines</string>
+
+    // Proxy settings
+    <string name="settings_proxy">Proxy</string>
+    <string name="proxy_enabled">Use custom proxy</string>
+    <string name="proxy_enabled_summary">Route update checks, downloads and icon loading through your proxy. Applied at the HTTP layer, so all sources follow it.</string>
+    <string name="proxy_type">Proxy type</string>
+    <string name="proxy_type_summary">Choose based on your proxy server</string>
+    <string name="proxy_type_http">HTTP</string>
+    <string name="proxy_type_socks">SOCKS</string>
+    <string name="proxy_host">Proxy host, e.g. 127.0.0.1</string>
+    <string name="proxy_port">Proxy port</string>
+    <string name="proxy_port_invalid">Port must be between 1 and 65535</string>
 </resources>

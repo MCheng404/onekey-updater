@@ -58,6 +58,11 @@ data class SettingsSnapshot(
 	val githubProxyDownloads: Boolean = true,
 
 	// MCP 服务（让 PC 上的 AI Agent 远程控制更新器）
+	val proxyEnabled: Boolean = false,
+	val proxyType: Int = 0,
+	val proxyHost: String = "",
+	val proxyPort: Int = 0,
+
 	val mcpEnabled: Boolean = false,
 	val mcpPort: Int = 8765,
 	val mcpToken: String = "",

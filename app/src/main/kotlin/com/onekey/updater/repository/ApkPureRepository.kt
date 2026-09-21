@@ -24,17 +24,46 @@ class ApkPureRepository(
 
     private val header = gson.toJson(DeviceHeader())
 
+    companion object {
+        private const val TAG = "ApkPureRepository"
+
+        /**
+         * 单个请求最多携带多少个应用。
+         *
+         * 上游是把**全部**已安装应用（180+）塞进一个请求。请求体过大时服务端耗时明显变长，
+         * 实测容易出现整批超时 —— 表现就是「APKPure 一条结果都拿不到」，而分批之后
+         * 单批可控、某一批失败也不会拖垮整个来源。
+         */
+        private const val CHUNK_SIZE = 50
+    }
+
     suspend fun updates(apps: List<AppInstalled>) = flow {
-        val info = apps.map { AppInfoForUpdate(it.packageName, it.versionCode) }
-        val r = service.getAppUpdate(header, GetAppUpdate(info))
-        val updates = r.app_update_response
+        val collected = mutableListOf<AppUpdateResponse>()
+
+        apps.chunked(CHUNK_SIZE).forEachIndexed { index, chunk ->
+            val info = chunk.map { AppInfoForUpdate(it.packageName, it.versionCode) }
+            val part = runCatching { service.getAppUpdate(header, GetAppUpdate(info)) }
+                .onFailure {
+                    Log.w(TAG, "第 " + (index + 1) + " 批失败（" + chunk.size + " 个应用）", it)
+                }
+                .getOrNull()
+                ?.app_update_response
+                .orEmpty()
+            // 逐批记录：以后再出现「拉不到更新」时，看日志就能定位是整体失败还是某一批失败
+            Log.i(TAG, "第 " + (index + 1) + "/" + ((apps.size + CHUNK_SIZE - 1) / CHUNK_SIZE) +
+                " 批返回 " + part.size + " 条")
+            collected += part
+        }
+
+        val updates = collected
+            .distinctBy { it.package_name }
             .filter { filterSignature(it.sign, apps.getSignature(it.package_name)) }
             .filter { filterAlpha(it) }
             .filter { filterBeta(it) }
             .map { it.toAppUpdate(apps.getApp(it.package_name)) }
         emit(updates)
     }.catch {
-        Log.e("ApkPureRepository", it.message, it)
+        Log.e(TAG, it.message, it)
         emit(emptyList())
     }
 

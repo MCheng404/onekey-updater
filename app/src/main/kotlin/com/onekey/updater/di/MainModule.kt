@@ -39,6 +39,7 @@ import com.onekey.updater.util.UpdatesNotification
 import com.onekey.updater.util.addUserAgentInterceptor
 import com.onekey.updater.util.isAndroidTv
 import com.onekey.updater.util.net.MirrorInterceptor
+import com.onekey.updater.util.net.ProxyConfig
 import com.onekey.updater.util.net.MirrorResolver
 import com.onekey.updater.util.net.NetworkDiagnostics
 import com.onekey.updater.util.play.PlayHttpClient
@@ -96,6 +97,8 @@ val mainModule = module {
 			.addUserAgentInterceptor("APKUpdater-v" + BuildConfig.VERSION_NAME)
 			.connectTimeout(20, TimeUnit.SECONDS)
 			.readTimeout(60, TimeUnit.SECONDS)
+			// 代理在 OkHttp 层设置：Retrofit / Downloader / Coil 三条链路自动全部生效
+			.apply { ProxyConfig.from(get()).let { if (it != null) proxy(it) } }
 			.build()
 	}
 
@@ -104,6 +107,8 @@ val mainModule = module {
 		OkHttpClient.Builder()
 			.addUserAgentInterceptor("APKUpdater-v" + BuildConfig.VERSION_NAME)
 			.connectTimeout(8, TimeUnit.SECONDS)
+			// 诊断也要走代理：否则测出来的是「直连时哪条线路快」，与用户实际使用不符
+			.apply { ProxyConfig.from(get()).let { if (it != null) proxy(it) } }
 			.build()
 	}
 

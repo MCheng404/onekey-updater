@@ -172,4 +172,19 @@
     // 腾讯应用宝来源
     <string name="source_tencent">腾讯应用宝</string>
     <string name="source_tencent_summary">逐包查询（该接口不支持批量），每次扫描最多检查 80 个应用、并发上限 4，避免给公益接口造成压力。</string>
+
+    // 诊断优化线路按钮
+    <string name="diagnostics_optimize">优化线路</string>
+
+    // 代理设置
+    <string name="settings_proxy">代理</string>
+    <string name="proxy_enabled">使用自定义代理</string>
+    <string name="proxy_enabled_summary">更新检查、下载、图标加载全部走该代理。在 HTTP 层统一生效，所有更新源都会遵循。</string>
+    <string name="proxy_type">代理类型</string>
+    <string name="proxy_type_summary">按你的代理服务端选择</string>
+    <string name="proxy_type_http">HTTP</string>
+    <string name="proxy_type_socks">SOCKS</string>
+    <string name="proxy_host">代理主机，例如 127.0.0.1</string>
+    <string name="proxy_port">代理端口</string>
+    <string name="proxy_port_invalid">端口需在 1–65535 之间</string>
 </resources>

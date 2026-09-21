@@ -69,6 +69,20 @@ class Prefs(
 	// 默认关闭；默认只监听回环地址，PC 侧配合 `adb forward` 访问。
 
 	/** 是否启用内嵌 MCP 服务。 */
+	// ---------- 代理 ----------
+	//
+	// 统一在 OkHttp 层生效，因此 Retrofit / Downloader / Coil 自动全部走代理。
+
+	/** 是否启用自定义代理。 */
+	val proxyEnabled = boolean("proxyEnabled", defValue = false, backed = true)
+
+	/** 代理类型：0 = HTTP，1 = SOCKS。见 ProxyConfig。 */
+	val proxyType = int("proxyType", defValue = 0, backed = true)
+
+	val proxyHost = string("proxyHost", defValue = "", backed = true)
+
+	val proxyPort = int("proxyPort", defValue = 0, backed = true)
+
 	val mcpEnabled = boolean("mcpEnabled", defValue = false, backed = true)
 
 	/** 监听端口。范围校验在 McpServer 内做（1024–65535）。 */

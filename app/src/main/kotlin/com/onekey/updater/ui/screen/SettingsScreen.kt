@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +76,8 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
 			item { InstallSection(settings, viewModel) }
 			item { Divider() }
 			item { ChinaNetworkSection(settings, viewModel) }
+			item { Divider() }
+			item { ProxySection(settings, viewModel) }
 			item { Divider() }
 			item { McpSection(settings, viewModel) }
 			item { Divider() }
@@ -322,8 +327,7 @@ private fun ChinaNetworkSection(s: SettingsSnapshot, vm: SettingsViewModel) {
 		DiagnosticsDialog(
 			state = diagnostics,
 			onRerun = { vm.runDiagnostics() },
-			onApplyGithub = { vm.applyBestGithubProxy() },
-			onApplyFdroid = { vm.applyBestFdroidMirror() },
+			onOptimize = { vm.applyBestLines() },
 			onDismiss = { showDiagnostics = false }
 		)
 	}
@@ -590,8 +594,7 @@ private fun AboutSection() {
 private fun DiagnosticsDialog(
 	state: SettingsViewModel.DiagnosticsState,
 	onRerun: () -> Unit,
-	onApplyGithub: () -> Unit,
-	onApplyFdroid: () -> Unit,
+	onOptimize: () -> Unit,
 	onDismiss: () -> Unit
 ) = OverlayDialog(
 	show = true,
@@ -600,6 +603,16 @@ private fun DiagnosticsDialog(
 	onDismissRequest = onDismiss
 ) {
 	Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+		// 结果区必须自己限高并可滚动：诊断一次会返回近百条线路，
+		// 之前结果直接把下面的按钮挤出弹窗、而且整体推不动，用户根本点不到按钮。
+		// 现在把滚动限制在结果区内部，按钮固定在其下方。
+		Column(
+			modifier = Modifier
+				.fillMaxWidth()
+				.heightIn(max = 360.dp)
+				.verticalScroll(rememberScrollState()),
+			verticalArrangement = Arrangement.spacedBy(6.dp)
+		) {
 		when (state) {
 			SettingsViewModel.DiagnosticsState.Idle ->
 				Text(stringResource(R.string.diagnostics_hint))
@@ -653,15 +666,18 @@ private fun DiagnosticsDialog(
 				}
 			}
 		}
+		}
 
+		// ---- 修复 #3：按钮合并为「优化线路」 ----
+		// 原先要用户分别点「使用最快 GitHub 线路」和「使用最快 F-Droid 线路」两次，
+		// 而且按钮被结果挤下去还推不动。现在一次把两类都调到实测最快的线路。
 		Row(
 			modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
 			horizontalArrangement = Arrangement.spacedBy(10.dp),
 			verticalAlignment = Alignment.CenterVertically
 		) {
 			TextButton(text = stringResource(R.string.diagnostics_rerun), onClick = onRerun)
-			TextButton(text = stringResource(R.string.diagnostics_apply_github), onClick = onApplyGithub)
-			TextButton(text = stringResource(R.string.diagnostics_apply_fdroid), onClick = onApplyFdroid)
+			TextButton(text = stringResource(R.string.diagnostics_optimize), onClick = onOptimize)
 		}
 		Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
 			Text(stringResource(R.string.close))
@@ -703,4 +719,71 @@ private fun diagnosticsKindLabel(kind: NetworkDiagnostics.Kind): String = when (
 	NetworkDiagnostics.Kind.GITHUB -> stringResource(R.string.diagnostics_group_github)
 	NetworkDiagnostics.Kind.FDROID -> stringResource(R.string.diagnostics_group_fdroid)
 	NetworkDiagnostics.Kind.SOURCE -> stringResource(R.string.diagnostics_group_source)
+}
+
+// ---------------------------------------------------------------- 代理
+
+/**
+ * 自定义代理。
+ *
+ * 为什么不做成「跟随系统」：系统代理对 App 是否生效取决于厂商实现，不可控；
+ * 用户想要的是「我配了就一定走」。实现在 OkHttp 层，因此更新检查、下载、图标加载
+ * 三条链路一起生效，不需要在各处分别设置。
+ */
+@Composable
+private fun ProxySection(s: SettingsSnapshot, vm: SettingsViewModel) {
+	SmallTitle(stringResource(R.string.settings_proxy))
+
+	Toggle(
+		stringResource(R.string.proxy_enabled),
+		summary = stringResource(R.string.proxy_enabled_summary),
+		checked = s.proxyEnabled,
+		onChange = vm::setProxyEnabled
+	)
+
+	if (!s.proxyEnabled) return
+
+	WindowDropdownPreference(
+		title = stringResource(R.string.proxy_type),
+		summary = stringResource(R.string.proxy_type_summary),
+		items = listOf(
+			stringResource(R.string.proxy_type_http),
+			stringResource(R.string.proxy_type_socks)
+		),
+		selectedIndex = s.proxyType.coerceIn(0, 1),
+		onSelectedIndexChange = vm::setProxyType
+	)
+
+	CustomUrlField(
+		value = s.proxyHost,
+		label = stringResource(R.string.proxy_host),
+		onValueChange = vm::setProxyHost
+	)
+
+	ProxyPortField(s.proxyPort, vm)
+}
+
+@Composable
+private fun ProxyPortField(current: Int, vm: SettingsViewModel) {
+	// 本地文本态：输入过程中不逐字符落库，避免"刚敲一位就被当成端口提交"
+	var text by remember(current) { mutableStateOf(if (current in 1..65535) current.toString() else "") }
+
+	TextField(
+		value = text,
+		onValueChange = { input ->
+			val cleaned = input.filter { it.isDigit() }.take(5)
+			text = cleaned
+			val v = cleaned.toIntOrNull()
+			if (v != null && v in 1..65535) {
+				vm.setProxyPort(v)
+			} else if (cleaned.length >= 4) {
+				// 只在明显非法时才提示，避免输入途中反复刷 snackbar
+				vm.notifyProxyPortInvalid()
+			}
+		},
+		modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+		label = stringResource(R.string.proxy_port),
+		useLabelAsPlaceholder = true,
+		singleLine = true
+	)
 }

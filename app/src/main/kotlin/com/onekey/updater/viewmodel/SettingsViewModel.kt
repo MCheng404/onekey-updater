@@ -186,6 +186,38 @@ class SettingsViewModel(
 	}
 
 	/** 采纳诊断结果：切换 F-Droid 镜像。 */
+	/**
+	 * 一键把两类线路都调到实测最快的那条。
+	 *
+	 * 原先需要用户分别点「使用最快 GitHub 线路」与「使用最快 F-Droid 线路」两次 ——
+	 * 界面上按钮一多还容易被结果挤下去。现在合并成一个动作，语义也更直白：
+	 * 「优化线路」= 两类都调优，不是只调 GitHub。
+	 */
+	fun applyBestLines() {
+		val state = diagnosticsState.value as? DiagnosticsState.Done ?: return
+
+		val bestGithub = state.results
+			.filter { it.kind == NetworkDiagnostics.Kind.GITHUB && it.ok && it.optionIndex >= 0 }
+			.minByOrNull { it.millis }
+		val bestFdroid = state.results
+			.filter { it.kind == NetworkDiagnostics.Kind.FDROID && it.ok && it.optionIndex >= 0 }
+			.minByOrNull { it.millis }
+
+		if (bestGithub == null && bestFdroid == null) {
+			snackBar.snackBar(viewModelScope, stringer.get(com.onekey.updater.R.string.diagnostics_no_working_line))
+			return
+		}
+		bestGithub?.let { prefs.githubProxyId.put(it.optionIndex) }
+		bestFdroid?.let { prefs.fdroidMirrorId.put(it.optionIndex) }
+		refresh()
+
+		val parts = buildList {
+			bestGithub?.let { add("GitHub: " + it.label + " " + it.millis + "ms") }
+			bestFdroid?.let { add("F-Droid: " + it.label + " " + it.millis + "ms") }
+		}
+		snackBar.snackBar(viewModelScope, parts.joinToString("；"))
+	}
+
 	fun applyBestFdroidMirror() {
 		val state = diagnosticsState.value as? DiagnosticsState.Done ?: return
 		val best = state.results
@@ -198,6 +230,23 @@ class SettingsViewModel(
 		prefs.fdroidMirrorId.put(best.optionIndex)
 		refresh()
 		snackBar.snackBar(viewModelScope, "${best.label} · ${best.millis} ms")
+	}
+
+	// ---------------- 代理 ----------------
+
+	fun setProxyEnabled(v: Boolean) = put { prefs.proxyEnabled.put(v) }
+	fun setProxyType(v: Int) = put { prefs.proxyType.put(v) }
+	fun setProxyHost(v: String) = put { prefs.proxyHost.put(v.trim()) }
+
+	/** 端口：越界不写入并提示，避免把全部请求打到坏地址上。返回是否已写入。 */
+	fun setProxyPort(v: Int): Boolean {
+		if (v !in 1..65535) return false
+		put { prefs.proxyPort.put(v) }
+		return true
+	}
+
+	fun notifyProxyPortInvalid() {
+		snackBar.snackBar(viewModelScope, stringer.get(com.onekey.updater.R.string.proxy_port_invalid))
 	}
 
 	// ---------------- MCP 服务 ----------------
@@ -305,6 +354,10 @@ class SettingsViewModel(
 		githubProxyId = prefs.githubProxyId.get(),
 		githubCustomProxy = prefs.githubCustomProxy.get(),
 		githubProxyDownloads = prefs.githubProxyDownloads.get(),
+		proxyEnabled = prefs.proxyEnabled.get(),
+		proxyType = prefs.proxyType.get(),
+		proxyHost = prefs.proxyHost.get(),
+		proxyPort = prefs.proxyPort.get(),
 		mcpEnabled = prefs.mcpEnabled.get(),
 		mcpPort = prefs.mcpPort.get(),
 		mcpToken = prefs.mcpToken.get(),
