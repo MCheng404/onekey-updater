@@ -1,4 +1,5 @@
 <resources>
+    <string name="app_name">一键更新</string>
     <string name="tab_apps">应用</string>
     <string name="tab_search">搜索</string>
     <string name="tab_updates">更新</string>
@@ -61,4 +62,96 @@
         <item quantity="other">发现 %1$d 个更新。</item>
     </plurals>
 
+
+    // Miuix UI 重构新增
+    <string name="no_updates">暂无可用更新</string>
+    <string name="no_apps">没有可显示的应用</string>
+    <string name="no_search_results">没有找到结果</string>
+    <string name="search_hint">搜索应用</string>
+    <string name="search_hint_long">至少输入 2 个字符，将在所有已启用的来源中搜索</string>
+    <string name="clear_search">清空</string>
+    <string name="copied">已复制到剪贴板</string>
+    <string name="close">关闭</string>
+    <string name="settings_filter">过滤</string>
+    <string name="source_apkmirror_summary">需要跳转浏览器下载</string>
+    <string name="source_play_summary">实验性功能，需要登录</string>
+    <string name="use_safe_stores_summary">仅使用受信任的 Aptoide 商店</string>
+    <string name="settings_install_mode">安装方式</string>
+    <string name="settings_install_mode_summary">下载完成后以何种方式安装</string>
+    <string name="install_mode_auto">自动（有 Root 则静默）</string>
+    <string name="install_mode_session">系统安装器（每次需确认）</string>
+    <string name="install_mode_root">Root 静默安装（su）</string>
+    <string name="install_mode_note">未获取 Root 时，系统安装器每次都会弹出确认框；获得 Root 后可完全静默安装。XAPK 分卷包必须使用 Root 安装。</string>
+    <string name="root_status">Root 状态</string>
+    <string name="root_granted">已获取 Root 权限</string>
+    <string name="root_denied">Root 授权被拒绝</string>
+    <string name="root_checking">正在申请 Root…</string>
+    <string name="root_unknown">尚未检测，点击申请授权</string>
+    <string name="settings_china_sources">国内网络优化</string>
+    <string name="use_china_mirror">启用国内镜像</string>
+    <string name="use_china_mirror_summary">把官方地址改写为国内可直连的镜像/加速线路</string>
+    <string name="github_proxy">GitHub 加速线路</string>
+    <string name="github_custom_proxy">自定义加速前缀</string>
+    <string name="github_proxy_downloads">加速 GitHub 附件下载</string>
+    <string name="fdroid_mirror">F-Droid 仓库</string>
+    <string name="fdroid_custom_url">自定义 F-Droid 仓库地址</string>
+    <string name="izzy_mirror">IzzyOnDroid 仓库</string>
+    <string name="izzy_custom_url">自定义 IzzyOnDroid 仓库地址</string>
+    <string name="mirror_direct">直连</string>
+    <string name="network_diagnostics">网络诊断</string>
+    <string name="network_diagnostics_summary">逐条实测线路，挑一条能用的</string>
+    <string name="diagnostics_hint">点击开始逐条实测</string>
+    <string name="diagnostics_running">正在实测…</string>
+    <string name="diagnostics_rerun">重新实测</string>
+    <string name="diagnostics_apply_github">使用最快 GitHub 线路</string>
+    <string name="diagnostics_apply_fdroid">使用最快 F-Droid 镜像</string>
+    <string name="diagnostics_no_working_line">没有实测到可用线路</string>
+    <string name="no_download_link">该来源没有提供下载地址</string>
+    <string name="xapk_requires_root">XAPK/APKS 分卷包需要 Root 权限才能静默安装</string>
+    <string name="need_install_permission">请先授予本应用「安装未知应用」权限，然后重试</string>
+
+    // 空状态过滤提示
+    <string name="filter_hint_prefix">注意：已排除</string>
+    <string name="filter_hint_store">应用商店安装的应用</string>
+    <string name="filter_hint_system">系统应用</string>
+    <string name="filter_hint_disabled">已停用的应用</string>
+    <string name="filter_hint_ignored">被忽略的应用</string>
+
+    // 扫描应用数
+    <string name="scanned_apps">已检查 %1$d 个已安装应用</string>
+
+    // 归并后的来源标签
+    <string name="source_with_count">共 %1$d 个来源</string>
+
+    // 更新范围与分段列表
+    <string name="settings_update_scope">更新范围</string>
+    <string name="update_system_apps">允许更新系统应用</string>
+    <string name="update_system_apps_summary">系统应用（含预装后被更新的，如 Chrome / WebView）将参与更新检查。侧载更新系统应用可能失败或导致异常，请谨慎开启。</string>
+    <string name="update_store_apps">包含应用商店安装的应用</string>
+    <string name="update_store_apps_summary">关闭后，由应用商店安装的应用将不参与更新检查</string>
+    <string name="update_scope_note">这两项决定「为哪些应用检查更新」；「应用」页顶部的三个图标只影响该页列表的显示。</string>
+    <string name="section_user_apps">用户应用</string>
+    <string name="section_system_apps">系统应用</string>
+    <string name="system_section_disabled">系统应用未参与检查，可在此开启「设置 → 更新范围 → 允许更新系统应用」</string>
+    <string name="system_section_empty">系统应用暂无可用更新</string>
+
+    // MCP 服务（PC 端 AI Agent 远程控制更新器）
+    <string name="mcp_service">MCP 服务</string>
+    <string name="mcp_enable">启用 MCP 服务</string>
+    <string name="mcp_enable_summary">允许电脑上的 AI Agent 通过本地网络控制本更新器：扫描、查看更新列表、安装、读取日志。</string>
+    <string name="mcp_port">端口</string>
+    <string name="mcp_port_summary">范围 1024–65535，修改后服务会自动重启。</string>
+    <string name="mcp_port_invalid">端口必须在 1024–65535 之间</string>
+    <string name="mcp_allow_lan">允许局域网访问</string>
+    <string name="mcp_allow_lan_summary">绑定到 0.0.0.0，局域网内任意设备都能访问本服务，务必依赖令牌保护。</string>
+    <string name="mcp_token">访问令牌</string>
+    <string name="mcp_token_unset">尚未生成</string>
+    <string name="mcp_token_dialog_title">访问令牌</string>
+    <string name="mcp_token_dialog_summary">任何持有此令牌的人都能控制本更新器，请勿泄露。</string>
+    <string name="mcp_token_copy">复制</string>
+    <string name="mcp_token_regenerate">重新生成</string>
+    <string name="mcp_status_running">运行中</string>
+    <string name="mcp_status_stopped">已停止</string>
+    <string name="mcp_status_error">出错</string>
+    <string name="mcp_adb_hint">在电脑上执行以连接本机：</string>
 </resources>

@@ -1,5 +1,4 @@
 <resources>
-  <string name="app_name" translatable="false">APKUpdater</string>
   <string name="tab_apps">Uygulamalar</string>
   <string name="tab_search">Ara</string>
   <string name="tab_updates">Güncellemeler</string>

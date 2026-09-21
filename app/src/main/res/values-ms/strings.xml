@@ -1,6 +1,5 @@
 <resources>
 
-    <string name="app_name" translatable="false">APKUpdater</string>
     <string name="tab_apps">Apps</string>
     <string name="tab_search">Cari</string>
     <string name="tab_updates">Kemas kini</string>

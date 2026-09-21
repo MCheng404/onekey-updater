@@ -1,6 +1,5 @@
 <resources>
 
-    <string name="app_name" translatable="false">APKUpdater</string>
     <string name="tab_apps">모든 앱</string>
     <string name="tab_search">검색</string>
     <string name="tab_updates">업데이트</string>

@@ -1,6 +1,5 @@
 <resources>
 
-    <string name="app_name" translatable="false">APKUpdater</string>
     <string name="tab_apps">Aplikasi</string>
     <string name="tab_search">Mencari</string>
     <string name="tab_updates">Pembaruan</string>

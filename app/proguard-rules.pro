@@ -18,4 +18,4 @@
 -keep,allowoptimization,allowshrinking,allowobfuscation class <3>
 
 # Models
--keep class com.apkupdater.data.** { *; }
+-keep class com.onekey.updater.data.** { *; }

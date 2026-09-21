@@ -1,6 +1,5 @@
 <resources>
 
-    <string name="app_name" translatable="false">APKUpdater</string>
     <string name="tab_apps">Applications</string>
     <string name="tab_search">Recherche</string>
     <string name="tab_updates">Mises à jour</string>

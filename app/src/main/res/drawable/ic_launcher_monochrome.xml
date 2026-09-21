@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 单色主题图标层（Android 13+ 的 themed icon）。
+     系统只用这一层的**透明度**重着色，所以箭头必须是真正的镂空（fillType=evenOdd），
+     否则箭身与圆盘同为不透明，单色模式下会糊成一个实心圆、看不出是更新图标。
+     填充色本身会被系统忽略，这里写黑色仅为占位。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#000000"
+        android:fillType="evenOdd"
+        android:pathData="M21,54 a33,33 0 1,0 66,0 a33,33 0 1,0 -66,0 Z
+                          M53,72 Q50,72 50,69 L50,55 Q50,52 47,52 L43,52
+                          Q38,52 41.54,48.46 L49.05,40.95
+                          Q54,36 58.95,40.95 L66.46,48.46
+                          Q70,52 65,52 L61,52 Q58,52 58,55 L58,69
+                          Q58,72 55,72 Z" />
+</vector>

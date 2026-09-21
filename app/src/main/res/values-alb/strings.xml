@@ -1,6 +1,5 @@
 <resources>
 
-    <string name="app_name" translatable="false">APKUpdater</string>
     <string name="tab_apps">Aplikacionet</string>
     <string name="tab_search">Kërko</string>
     <string name="tab_updates">Përditësime</string>

@@ -1,0 +1,54 @@
+package com.onekey.updater.application
+
+import android.app.Application
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import android.util.Log
+import com.onekey.updater.di.mainModule
+import com.onekey.updater.prefs.Prefs
+import com.onekey.updater.util.mcp.McpServer
+import com.onekey.updater.util.Migrations
+import com.topjohnwu.superuser.Shell
+import okhttp3.OkHttpClient
+import org.koin.android.ext.koin.androidContext
+import org.koin.android.ext.koin.androidLogger
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
+import org.koin.core.context.startKoin
+
+class App : Application(), SingletonImageLoader.Factory, KoinComponent {
+
+	override fun onCreate() {
+		super.onCreate()
+
+		// 超时单位是秒。上游设为 10 秒，而 `pm install` 安装大 APK 很容易超过 10 秒，
+		// 会被 libsu 直接掐断并返回失败。这里改为 0（不设超时），由上层协程控制等待时长。
+		Shell.setDefaultBuilder(Shell.Builder.create().setTimeout(0))
+
+		startKoin {
+			androidLogger()
+			androidContext(this@App)
+			modules(mainModule)
+		}
+
+		// 一次性配置迁移：让新增的国内镜像默认值对老用户也生效
+		runCatching { Migrations.run(get()) }
+			.onFailure { Log.e("App", "配置迁移失败。", it) }
+
+		// 内嵌 MCP 服务：仅在用户开启时启动。
+		// 端口/绑定地址/令牌都由服务自己读偏好决定，这里不传参——
+		// 否则会出现「设置页改了端口、服务还在用旧端口」的不一致。
+		runCatching {
+			if (get<Prefs>().mcpEnabled.get()) get<McpServer>().start()
+		}.onFailure { Log.e("App", "MCP 服务启动失败。", it) }
+	}
+
+	override fun newImageLoader(context: PlatformContext) = ImageLoader
+		.Builder(this)
+		.components { add(OkHttpNetworkFetcherFactory(callFactory = { get<OkHttpClient>() })) }
+		//.logger(DebugLogger())
+		.build()
+
+}

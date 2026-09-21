@@ -1,6 +1,6 @@
 <resources>
 
-    <string name="app_name" translatable="false">APKUpdater</string>
+    <string name="app_name">OneKey Updater</string>
     <string name="tab_apps">Apps</string>
     <string name="tab_search">Search</string>
     <string name="tab_updates">Updates</string>
@@ -74,4 +74,96 @@
         <item quantity="other">Found %1$d updates.</item>
     </plurals>
 
+
+    // Added by the Miuix UI rewrite
+    <string name="no_updates">No updates available</string>
+    <string name="no_apps">No apps to show</string>
+    <string name="no_search_results">No results</string>
+    <string name="search_hint">Search apps</string>
+    <string name="search_hint_long">Type at least 2 characters to search across all enabled sources</string>
+    <string name="clear_search">Clear</string>
+    <string name="copied">Copied to clipboard</string>
+    <string name="close">Close</string>
+    <string name="settings_filter">Filtering</string>
+    <string name="source_apkmirror_summary">Requires opening the browser to download</string>
+    <string name="source_play_summary">Experimental, requires sign-in</string>
+    <string name="use_safe_stores_summary">Only trusted Aptoide stores</string>
+    <string name="settings_install_mode">Install method</string>
+    <string name="settings_install_mode_summary">How downloaded packages are installed</string>
+    <string name="install_mode_auto">Automatic (root if available)</string>
+    <string name="install_mode_session">System installer (confirm each time)</string>
+    <string name="install_mode_root">Root silent install (su)</string>
+    <string name="install_mode_note">The system installer will always ask for confirmation unless the device is rooted; with root, installs complete silently. XAPK split packages require root.</string>
+    <string name="root_status">Root status</string>
+    <string name="root_granted">Root granted</string>
+    <string name="root_denied">Root denied</string>
+    <string name="root_checking">Requesting root…</string>
+    <string name="root_unknown">Not checked yet, tap to request</string>
+    <string name="settings_china_sources">China-friendly network</string>
+    <string name="use_china_mirror">Use domestic mirrors</string>
+    <string name="use_china_mirror_summary">Rewrite official endpoints to mirrors reachable in mainland China</string>
+    <string name="github_proxy">GitHub accelerator</string>
+    <string name="github_custom_proxy">Custom accelerator prefix</string>
+    <string name="github_proxy_downloads">Proxy GitHub release downloads</string>
+    <string name="fdroid_mirror">F-Droid repository</string>
+    <string name="fdroid_custom_url">Custom F-Droid repo URL</string>
+    <string name="izzy_mirror">IzzyOnDroid repository</string>
+    <string name="izzy_custom_url">Custom IzzyOnDroid repo URL</string>
+    <string name="mirror_direct">Direct</string>
+    <string name="network_diagnostics">Network diagnostics</string>
+    <string name="network_diagnostics_summary">Probe every line and pick a reachable one</string>
+    <string name="diagnostics_hint">Tap to start probing all lines</string>
+    <string name="diagnostics_running">Probing…</string>
+    <string name="diagnostics_rerun">Re-run</string>
+    <string name="diagnostics_apply_github">Use fastest GitHub line</string>
+    <string name="diagnostics_apply_fdroid">Use fastest F-Droid mirror</string>
+    <string name="diagnostics_no_working_line">No reachable line found</string>
+    <string name="no_download_link">This source provides no download link</string>
+    <string name="xapk_requires_root">XAPK/APKS split packages require root to install silently</string>
+    <string name="need_install_permission">Grant "Install unknown apps" permission for this app, then retry</string>
+
+    // Empty-state filter hints
+    <string name="filter_hint_prefix">Note: </string>
+    <string name="filter_hint_store">app-store apps</string>
+    <string name="filter_hint_system">system apps</string>
+    <string name="filter_hint_disabled">disabled apps</string>
+    <string name="filter_hint_ignored">ignored apps</string>
+
+    // Scanned app count
+    <string name="scanned_apps">Checked %1$d installed apps</string>
+
+    // Grouped update source label
+    <string name="source_with_count">%1$d sources</string>
+
+    // Update scope + sectioned list
+    <string name="settings_update_scope">Update scope</string>
+    <string name="update_system_apps">Allow updating system apps</string>
+    <string name="update_system_apps_summary">System apps (including preinstalled-then-updated ones like Chrome / WebView) will be checked for updates. Sideloading a system app update may fail or cause issues.</string>
+    <string name="update_store_apps">Include app-store installed apps</string>
+    <string name="update_store_apps_summary">When off, apps installed by an app store are skipped</string>
+    <string name="update_scope_note">These options decide which apps are checked for updates. The three icons on the \"Apps\" tab only filter what that list displays.</string>
+    <string name="section_user_apps">User apps</string>
+    <string name="section_system_apps">System apps</string>
+    <string name="system_section_disabled">System apps are not being checked. Enable \"Settings → Update scope → Allow updating system apps\" to include them.</string>
+    <string name="system_section_empty">No system app updates available</string>
+
+    // MCP 服务（PC 端 AI Agent 远程控制更新器）
+    <string name="mcp_service">MCP Service</string>
+    <string name="mcp_enable">Enable MCP server</string>
+    <string name="mcp_enable_summary">Lets a PC AI agent control this updater over the local network: scan, list updates, install, read logs.</string>
+    <string name="mcp_port">Port</string>
+    <string name="mcp_port_summary">Must be 1024–65535. Changing it restarts the server.</string>
+    <string name="mcp_port_invalid">Port must be between 1024 and 65535</string>
+    <string name="mcp_allow_lan">Allow LAN access</string>
+    <string name="mcp_allow_lan_summary">Binds to 0.0.0.0 — any device on your network can reach the server. Always rely on the token.</string>
+    <string name="mcp_token">Access token</string>
+    <string name="mcp_token_unset">Not generated yet</string>
+    <string name="mcp_token_dialog_title">Access token</string>
+    <string name="mcp_token_dialog_summary">Anyone with this token can control the updater. Keep it secret.</string>
+    <string name="mcp_token_copy">Copy</string>
+    <string name="mcp_token_regenerate">Regenerate</string>
+    <string name="mcp_status_running">Running</string>
+    <string name="mcp_status_stopped">Stopped</string>
+    <string name="mcp_status_error">Error</string>
+    <string name="mcp_adb_hint">Run on PC to reach this device:</string>
 </resources>
