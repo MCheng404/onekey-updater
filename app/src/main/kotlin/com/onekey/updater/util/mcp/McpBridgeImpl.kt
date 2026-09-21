@@ -136,8 +136,15 @@ class McpBridgeImpl(
         }
 
         is Link.Xapk -> if (prefs.isRootInstall()) {
-            installer.installXapk(update.id, update.packageName, downloader.downloadStream(link.link).stream)
-            McpInstallResult(true, "已提交 Root 安装（xapk 分卷包）")
+            // 必须用真实结果：此前这里硬编码 true，导致安装实际失败（会话创建/写入报错）
+            // 时也向调用方回报「已提交 Root 安装」，谎报成功。
+            val ok = installer.installXapk(
+                update.id, update.packageName, downloader.downloadStream(link.link).stream
+            )
+            McpInstallResult(
+                ok,
+                if (ok) "分卷包（xapk）安装成功" else "分卷包安装失败，详情见设备上的提示"
+            )
         } else {
             McpInstallResult(false, "xapk/apks 分卷包需要 Root 权限才能静默安装")
         }

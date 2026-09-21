@@ -299,7 +299,14 @@ class SessionInstaller(
     }
 
     /** xapk / apks 分卷包：解包后安装。base.apk 必须排在最前。 */
-    suspend fun installXapk(id: Int, packageName: String, stream: InputStream, size: Long = -1L) {
+    /**
+     * 安装 xapk / apks 分卷包。
+     *
+     * @return 是否安装成功。**必须把结果返回给调用方** —— MCP 的 install_update 依赖它，
+     *         此前该函数只 emit 状态、不返回值，调用方只能硬编码"成功"，
+     *         于是安装实际失败时也回报成功（实测踩到）。
+     */
+    suspend fun installXapk(id: Int, packageName: String, stream: InputStream, size: Long = -1L): Boolean {
         val archive = File(context.cacheDir, "${randomUUID()}.xapk")
         val extracted = mutableListOf<File>()
         try {
@@ -310,7 +317,7 @@ class SessionInstaller(
                     .filter { !it.isDirectory && it.name.endsWith(".apk", ignoreCase = true) }
                 if (entries.isEmpty()) {
                     installLog.emitStatus(AppInstallStatus(false, id, true, "压缩包内没有找到 APK"))
-                    return
+                    return false
                 }
                 // base.apk 必须排在最前，否则部分 ROM 会拒绝 split 安装
                 val ordered = entries.sortedWith(
@@ -333,6 +340,7 @@ class SessionInstaller(
                     AppInstallStatus(result.success, id, true, result.message.takeIf { !result.success })
                 )
                 if (!result.success) Log.e(TAG, "root xapk 安装失败: ${result.message}")
+                return result.success
             } else {
                 installLog.emitStatus(
                     AppInstallStatus(
@@ -340,10 +348,12 @@ class SessionInstaller(
                         "xapk/apks 分卷包需要 Root 权限才能静默安装，请在设置中开启"
                     )
                 )
+                return false
             }
         } catch (t: Throwable) {
             Log.e(TAG, "xapk 安装异常。", t)
             installLog.emitStatus(AppInstallStatus(false, id, true, t.message))
+            return false
         } finally {
             runCatching { archive.delete() }
             extracted.forEach { runCatching { it.delete() } }

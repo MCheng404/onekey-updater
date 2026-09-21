@@ -20,6 +20,9 @@ import java.io.File
 object RootInstaller {
 
     private const val TAG = "RootInstaller"
+    /** 从 `pm install-create` 的 "Success: created install session [123456]" 里取出会话号。 */
+    private val SESSION_ID = Regex("""\[(\d+)]""")
+
     private const val STAGING_DIR = "/data/local/tmp"
 
     data class Result(val success: Boolean, val message: String = "")
@@ -76,9 +79,12 @@ object RootInstaller {
                     if (allowDowngrade) append(" -d")
                     if (grantPermissions) append(" -g")
                 }
-                val target = staged.joinToString(" ") { quote(it) }
-                val verb = if (staged.size > 1) "install-multiple" else "install"
-                val installResult = RootShell.exec("pm $verb$flags --user $user $target")
+                val verb = if (staged.size > 1) "install-session" else "install"
+                val installResult = if (staged.size == 1) {
+                    RootShell.exec("pm install$flags --user $user ${quote(staged[0])}")
+                } else {
+                    installSplits(staged, flags, user)
+                }
                 val output = installResult.stdout
                 Log.i(TAG, "pm $verb (user=$user) -> exit=${installResult.exitCode}\n$output")
 
@@ -100,6 +106,44 @@ object RootInstaller {
             }
             apks.forEach { runCatching { it.delete() } }
         }
+    }
+
+    /**
+     * 多分卷（xapk / apks）的 Root 安装：会话式。
+     *
+     * 为什么不用 `pm install-multiple`：本机实测（小米 15 / Android 17 / HyperOS）
+     * `pm install-multiple` 与 `cmd package install-multiple` **都不存在**，
+     * 直接返回 `Unknown command`、退出码 255 —— 也就是上游那条路径在任何情况下都不可能成功，
+     * 而它此前只被记为一条日志，外层还会把它当成"已提交"。
+     *
+     * 正确做法是 PackageInstaller 的会话流程，`pm install-create` 在本机实测可用：
+     *   install-create -S <总字节> → install-write -S <单卷字节> <会话> <卷名> <路径> → install-commit
+     * 任一步失败都要 install-abandon，否则残留的会话会占住 installd 的槽位。
+     */
+    private suspend fun installSplits(staged: List<String>, flags: String, user: Int): ExecResult {
+        val total = staged.sumOf { File(it).length() }
+        val create = RootShell.exec("pm install-create$flags --user $user -S $total")
+        val sessionId = SESSION_ID.find(create.stdout)?.groupValues?.get(1)
+            ?: return ExecResult(
+                false, create.exitCode, create.stdout,
+                "无法创建安装会话：" + create.stdout.trim().ifBlank { create.stderr.trim() }
+            )
+
+        for ((index, path) in staged.withIndex()) {
+            val write = RootShell.exec(
+                "pm install-write -S ${File(path).length()} $sessionId split$index.apk ${quote(path)}"
+            )
+            // 卷名只要在会话内唯一即可，真正的分卷名来自各 APK 的清单
+            if (!write.stdout.contains("Success", ignoreCase = true)) {
+                RootShell.exec("pm install-abandon $sessionId")
+                return ExecResult(
+                    false, write.exitCode, write.stdout,
+                    "写入分卷 split$index.apk 失败：" + write.stdout.trim().ifBlank { write.stderr.trim() }
+                )
+            }
+        }
+
+        return RootShell.exec("pm install-commit $sessionId")
     }
 
     /** 读取当前前台用户 id；失败时回退到 0。 */
