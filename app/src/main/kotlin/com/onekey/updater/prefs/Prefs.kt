@@ -31,6 +31,9 @@ class Prefs(
 	val useAptoide = boolean("useAptoide", defValue = true, backed = true)
 	val useApkPure = boolean("useApkPure", defValue = true, backed = true)
 	val usePlay = boolean("usePlay", defValue = false, backed = true)
+
+	/** 腾讯应用宝。逐包查询、限流限量，详见 TencentRepository。 */
+	val useTencent = boolean("useTencent", defValue = false, backed = true)
 	val enableAlarm = boolean("enableAlarm", defValue = false, backed = true)
 	val alarmHour = int("alarmHour", defValue = 12, backed = true)
 	val alarmFrequency = int("alarmFrequency", 0, backed = true)

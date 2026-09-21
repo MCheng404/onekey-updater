@@ -3,6 +3,13 @@ package com.onekey.updater.ui.screen
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.platform.LocalContext
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Card
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.padding
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -72,6 +79,14 @@ fun AppsScreen(viewModel: AppsViewModel) {
 					EmptyState(stringResource(R.string.no_apps))
 				} else {
 					AppList {
+						// 只读到个位数应用，几乎可以断定是系统没放行「获取已安装的应用信息」
+						// （小米等 ROM 会在首次调用 getInstalledPackages 时弹窗，未授权就只返回自身）。
+						// 此前这里什么都不提示，用户看到的就是「应用列表是空的、出现得很慢」。
+						if (state.apps.size <= 3) {
+							item(key = "app-list-permission-hint", contentType = "permissionHint") {
+								AppListPermissionHint(state.apps.size)
+							}
+						}
 						items(state.apps, key = { it.packageName }) { app ->
 							InstalledCard(app) { viewModel.ignore(app.packageName) }
 						}
@@ -119,3 +134,46 @@ private fun FilterIcon(
 /** 预留：应用列表刷新时的居中指示器（当前由 PullToRefresh 承担）。 */
 @Composable
 internal fun AppsLoadingIndicator() = CircularProgressIndicator(progress = null, size = 32.dp)
+
+/**
+ * 「只读到很少应用」时的提示。
+ *
+ * 这不是可有可无的文案：MIUI/HyperOS 未放行「获取已安装的应用信息」时，
+ * `getInstalledPackages` 只会返回应用自身，于是应用列表几乎为空 —— 用户看到的现象就是
+ * 「应用半天不出来 / 没有应用」。给出原因 + 一键跳到系统设置，才有可操作性。
+ */
+@Composable
+private fun AppListPermissionHint(count: Int) {
+	val context = LocalContext.current
+	Card {
+		Column(
+			modifier = Modifier.fillMaxWidth().padding(14.dp),
+			verticalArrangement = Arrangement.spacedBy(8.dp)
+		) {
+			Text(
+				text = stringResource(R.string.app_list_permission_title),
+				style = MiuixTheme.textStyles.body1
+			)
+			Text(
+				text = stringResource(R.string.app_list_permission_summary, count),
+				style = MiuixTheme.textStyles.footnote1,
+				color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+			)
+			Button(
+				onClick = {
+					runCatching {
+						context.startActivity(
+							android.content.Intent(
+								android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+								android.net.Uri.parse("package:" + context.packageName)
+							).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+						)
+					}
+				},
+				modifier = Modifier.fillMaxWidth()
+			) {
+				Text(stringResource(R.string.app_list_permission_action))
+			}
+		}
+	}
+}

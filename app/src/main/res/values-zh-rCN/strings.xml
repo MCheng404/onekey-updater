@@ -154,4 +154,22 @@
     <string name="mcp_status_stopped">已停止</string>
     <string name="mcp_status_error">出错</string>
     <string name="mcp_adb_hint">在电脑上执行以连接本机：</string>
+
+    // 应用列表权限提示
+    <string name="app_list_permission_title">只读取到很少的应用</string>
+    <string name="app_list_permission_summary">当前只读到 %1$d 个应用。如果你的设备上装了更多应用，说明系统尚未放行「获取已安装的应用信息」权限。请在系统设置中允许后回来下拉刷新。</string>
+    <string name="app_list_permission_action">打开系统设置</string>
+
+    // 网络诊断分组
+    <string name="diagnostics_group_github">GitHub 线路</string>
+    <string name="diagnostics_group_fdroid">F-Droid 镜像</string>
+    <string name="diagnostics_group_source">第三方来源</string>
+    <string name="diagnostics_usable_count">%2$d 条中 %1$d 条可用</string>
+    <string name="diagnostics_fastest">最快：%1$s · %2$d ms</string>
+    <string name="diagnostics_none_usable">本组无可用线路</string>
+    <string name="diagnostics_more_hidden">另有 %1$d 条未显示（按延迟排序，只列最快的）</string>
+
+    // 腾讯应用宝来源
+    <string name="source_tencent">腾讯应用宝</string>
+    <string name="source_tencent_summary">逐包查询（该接口不支持批量），每次扫描最多检查 80 个应用、并发上限 4，避免给公益接口造成压力。</string>
 </resources>

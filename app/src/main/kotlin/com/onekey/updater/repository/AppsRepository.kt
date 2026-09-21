@@ -2,8 +2,10 @@ package com.onekey.updater.repository
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import com.onekey.updater.data.ui.AppInstalled
 import com.onekey.updater.prefs.Prefs
@@ -13,6 +15,11 @@ import com.onekey.updater.util.RootAppList
 import com.onekey.updater.util.getSignatureSha1
 import com.onekey.updater.util.getSignatureSha256
 import com.onekey.updater.util.orFalse
+import com.onekey.updater.util.AppLog
+import com.onekey.updater.util.clearSystemAppCache
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 
@@ -21,6 +28,69 @@ class AppsRepository(
 	private val context: Context,
 	private val prefs: Prefs
 ) {
+
+	companion object {
+		private const val TAG = "AppsRepository"
+
+		/**
+		 * 原始应用清单的缓存时长。
+		 *
+		 * 为什么要缓存：`getInstalledPackages(MATCH_ALL + GET_SIGNING_CERTIFICATES)` 是本项目
+		 * 最贵的一次调用（182 个应用的签名要跨进程取回），而它会被读两遍——
+		 * 「应用」页一次、「更新」页的扫描又一次，两者过滤条件还不同。
+		 * 冷启动时这直接体现为「应用出现得很慢」。
+		 * 缓存原始清单后，过滤在本地做，第二次调用零成本。
+		 */
+		private const val CACHE_TTL_MS = 60_000L
+	}
+
+	private val cacheMutex = Mutex()
+
+	@Volatile
+	private var cachedPackages: List<PackageInfo>? = null
+
+	@Volatile
+	private var cachedPackagesAt = 0L
+
+	/** 安装来源记忆：`getInstallerPackageName` 每个应用一次 IPC，而它在一次扫描里会被问好几遍。 */
+	private val installerCache = ConcurrentHashMap<String, String>()
+
+	/**
+	 * 取原始应用清单（带签名），带 TTL 缓存与单飞（并发调用只会真正扫一次）。
+	 *
+	 * 返回值是**未过滤**的完整清单，过滤由各调用点按自己的语义在本地完成。
+	 */
+	private suspend fun installedPackages(): List<PackageInfo> = cacheMutex.withLock {
+		val cached = cachedPackages
+		if (cached != null &&
+			SystemClock.elapsedRealtime() - cachedPackagesAt < CACHE_TTL_MS
+		) {
+			return@withLock cached
+		}
+		val fresh = context.packageManager
+			.getInstalledPackages(PackageManager.MATCH_ALL + getSignatureFlag())
+		cachedPackages = fresh
+		cachedPackagesAt = SystemClock.elapsedRealtime()
+		AppLog.log(TAG, "应用清单已刷新（" + fresh.size + " 个包）")
+		fresh
+	}
+
+	/** 安装来源（带记忆）。返回空串表示未知。 */
+	private fun installerOf(packageName: String): String =
+		installerCache.getOrPut(packageName) {
+			@Suppress("DEPRECATION")
+			runCatching { context.packageManager.getInstallerPackageName(packageName) }.getOrNull().orEmpty()
+		}
+
+	/**
+	 * 丢弃缓存。安装/卸载/更新应用后必须调用，否则会读到过期清单（TTL 内）。
+	 */
+	fun invalidate() {
+		cachedPackages = null
+		cachedPackagesAt = 0L
+		installerCache.clear()
+		clearSystemAppCache()
+	}
 
 	/**
 	 * 读取已安装应用。
@@ -81,7 +151,7 @@ class AppsRepository(
 				// 排除应用商店安装的（默认排除，除非 includeStoreApps 或关闭该开关）。
 				.filter {
 					includeStoreApps || !excludeStore() ||
-						!isAppStore(getInstallerPackageName(it.packageName))
+						!isAppStore(installerOf(it.packageName))
 				}
 				.map { entry ->
 					val pi = piMap[entry.packageName]
@@ -107,12 +177,11 @@ class AppsRepository(
 	/**
 	 * 原有 PackageManager 路径（root/dex 不可用时的回退，逻辑保持原样）。
 	 */
-	private fun getAppsViaPackageManager(
+	private suspend fun getAppsViaPackageManager(
 		includeStoreApps: Boolean,
 		includeSystemApps: Boolean
 	): List<AppInstalled> {
-		return context.packageManager
-			.getInstalledPackages(PackageManager.MATCH_ALL + getSignatureFlag())
+		return installedPackages()
 			.asSequence()
 			// includeSystemApps 为 true 时绕过「排除系统应用」，
 			// 但仍受 excludeDisabled（已停用应用无法安装更新）约束。
@@ -130,7 +199,7 @@ class AppsRepository(
 			.filter {
 				includeStoreApps ||
 					!excludeStore() ||
-					!isAppStore(getInstallerPackageName(it.packageName))
+					!isAppStore(installerOf(it.packageName))
 			}
 			.map { it.toAppInstalled(context, ignoredApps()) }
 			.sortedBy { it.name }

@@ -16,6 +16,7 @@ data class SettingsSnapshot(
 	val useIzzy: Boolean = true,
 	val useAptoide: Boolean = true,
 	val useApkPure: Boolean = true,
+	val useTencent: Boolean = false,
 	val usePlay: Boolean = true,
 
 	// 过滤

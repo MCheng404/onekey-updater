@@ -119,6 +119,12 @@ private fun SourcesSection(s: SettingsSnapshot, vm: SettingsViewModel) {
 	Toggle(stringResource(R.string.source_aptoide), checked = s.useAptoide, onChange = vm::setUseAptoide)
 	Toggle(stringResource(R.string.source_apkpure), checked = s.useApkPure, onChange = vm::setUseApkPure)
 	Toggle(
+		stringResource(R.string.source_tencent),
+		summary = stringResource(R.string.source_tencent_summary),
+		checked = s.useTencent,
+		onChange = vm::setUseTencent
+	)
+	Toggle(
 		stringResource(R.string.source_apkmirror),
 		summary = stringResource(R.string.source_apkmirror_summary),
 		checked = s.useApkMirror,
@@ -601,8 +607,50 @@ private fun DiagnosticsDialog(
 			SettingsViewModel.DiagnosticsState.Running ->
 				Text(stringResource(R.string.diagnostics_running))
 
-			is SettingsViewModel.DiagnosticsState.Done -> state.results.forEach { result ->
-				DiagnosticsRow(result)
+			is SettingsViewModel.DiagnosticsState.Done -> {
+				// 分组 + 最快优先 + 每组只显示前若干条。
+				// 接入 78 个 GitHub 节点后，平铺列表会长到没法看；而这个界面的目的
+				// 只是「挑一条能用的、最快的」，所以按类别收起、按延迟排序最有价值。
+				val byKind = state.results.groupBy { it.kind }
+				listOf(
+					NetworkDiagnostics.Kind.GITHUB,
+					NetworkDiagnostics.Kind.FDROID,
+					NetworkDiagnostics.Kind.SOURCE
+				).forEach { kind ->
+					val items = byKind[kind] ?: return@forEach
+					val sorted = items.sortedWith(compareBy({ !it.ok }, { it.millis }))
+					val best = sorted.firstOrNull { it.ok }
+					val usable = sorted.count { it.ok }
+
+					Text(
+						text = diagnosticsKindLabel(kind) + "  ·  " +
+							stringResource(R.string.diagnostics_usable_count, usable, items.size),
+						style = MiuixTheme.textStyles.footnote2,
+						color = MiuixTheme.colorScheme.primary,
+						modifier = Modifier.padding(top = 10.dp)
+					)
+					Text(
+						text = if (best != null) {
+							stringResource(R.string.diagnostics_fastest, best.label, best.millis)
+						} else {
+							stringResource(R.string.diagnostics_none_usable)
+						},
+						style = MiuixTheme.textStyles.footnote1,
+						color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+					)
+
+					sorted.take(DIAGNOSTICS_MAX_ROWS).forEach { DiagnosticsRow(it) }
+					if (sorted.size > DIAGNOSTICS_MAX_ROWS) {
+						Text(
+							text = stringResource(
+								R.string.diagnostics_more_hidden,
+								sorted.size - DIAGNOSTICS_MAX_ROWS
+							),
+							style = MiuixTheme.textStyles.footnote2,
+							color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+						)
+					}
+				}
 			}
 		}
 
@@ -645,4 +693,14 @@ private fun DiagnosticsRow(result: NetworkDiagnostics.Result) = Row(
 		maxLines = 1,
 		modifier = Modifier.widthIn(max = 130.dp)
 	)
+}
+
+/** 诊断结果每组最多显示多少条。 */
+private const val DIAGNOSTICS_MAX_ROWS = 8
+
+@Composable
+private fun diagnosticsKindLabel(kind: NetworkDiagnostics.Kind): String = when (kind) {
+	NetworkDiagnostics.Kind.GITHUB -> stringResource(R.string.diagnostics_group_github)
+	NetworkDiagnostics.Kind.FDROID -> stringResource(R.string.diagnostics_group_fdroid)
+	NetworkDiagnostics.Kind.SOURCE -> stringResource(R.string.diagnostics_group_source)
 }

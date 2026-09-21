@@ -27,6 +27,7 @@ class UpdatesRepository(
     private val apkPureRepository: ApkPureRepository,
     private val gitLabRepository: GitLabRepository,
     private val playRepository: PlayRepository,
+    private val tencentRepository: TencentRepository,
     private val prefs: Prefs
 ) {
 
@@ -69,6 +70,7 @@ class UpdatesRepository(
                 if (prefs.useApkPure.get()) sources.add(apkPureRepository.updates(filtered))
                 if (prefs.useGitLab.get()) sources.add(gitLabRepository.updates(filtered))
                 if (prefs.usePlay.get()) sources.add(playRepository.updates(filtered))
+                if (prefs.useTencent.get()) sources.add(tencentRepository.updates(filtered))
 
                 if (sources.isEmpty()) {
                     emit(UpdateScan(emptyList(), filtered.size, systemIncluded))

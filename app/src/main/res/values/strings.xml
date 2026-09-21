@@ -166,4 +166,22 @@
     <string name="mcp_status_stopped">Stopped</string>
     <string name="mcp_status_error">Error</string>
     <string name="mcp_adb_hint">Run on PC to reach this device:</string>
+
+    // App list permission hint
+    <string name="app_list_permission_title">Only a few apps were detected</string>
+    <string name="app_list_permission_summary">Only %1$d apps were read. If your device has more installed, the system has not granted this app access to the installed-app list. Allow it in system settings, then pull down to refresh.</string>
+    <string name="app_list_permission_action">Open system settings</string>
+
+    // Diagnostics grouping
+    <string name="diagnostics_group_github">GitHub lines</string>
+    <string name="diagnostics_group_fdroid">F-Droid mirrors</string>
+    <string name="diagnostics_group_source">Third-party sources</string>
+    <string name="diagnostics_usable_count">%1$d of %2$d usable</string>
+    <string name="diagnostics_fastest">Fastest: %1$s · %2$d ms</string>
+    <string name="diagnostics_none_usable">No usable line in this group</string>
+    <string name="diagnostics_more_hidden">%1$d more hidden (sorted by latency, only the fastest shown)</string>
+
+    // Tencent MyApp source
+    <string name="source_tencent">Tencent MyApp</string>
+    <string name="source_tencent_summary">Queried package by package (the API has no batch mode), limited to 80 apps per scan with concurrency capped at 4.</string>
 </resources>

@@ -37,14 +37,23 @@ class NetworkDiagnostics(private val plainClient: OkHttpClient) {
     )
 
     companion object {
-        private const val PROBE_TIMEOUT_MS = 8_000
+        /**
+         * 单个探针的超时。
+         *
+         * 原为 8 秒 —— 那时 GitHub 只有 4 条线路，无所谓。接入 78 条之后，
+         * 最坏情况变成 88 个探针 × 8 秒 ÷ 并发，实测要等约 60 秒。
+         * 这里降到 5 秒：超过 5 秒还没响应的线路本来也不值得选，
+         * 用它换整体等待时间减半是划算的。
+         */
+        private const val PROBE_TIMEOUT_MS = 5_000
         private const val UA = "APKUpdater"
 
         /**
          * 诊断并发上限。GitHub 节点现在有 78+ 条，若一次性全开，既吃用户流量也拖慢整体耗时。
          * 这里限制同时最多 8 个探针在飞，其余排队；既能快速给出「最快可用线路」，又不至于打爆网络。
          */
-        private const val MAX_CONCURRENCY = 8
+        /** 并发上限。从 8 提到 16：探针都是轻量请求，数量却从 4 条涨到 88 条。 */
+        private const val MAX_CONCURRENCY = 16
 
         private const val GITHUB_API = "https://api.github.com/repos/rumboalla/apkupdater/releases/latest"
 
@@ -54,6 +63,7 @@ class NetworkDiagnostics(private val plainClient: OkHttpClient) {
             Probe("Aptoide", "https://ws75.aptoide.com/api/7/", Kind.SOURCE),
             Probe("APKMirror", "https://www.apkmirror.com/", Kind.SOURCE),
             Probe("GitLab", "https://gitlab.com/api/v4/projects", Kind.SOURCE),
+            Probe("腾讯应用宝", "https://upage.html5.qq.com/wechat-apkinfo", Kind.SOURCE),
             Probe("GitHub 直连", GITHUB_API, Kind.GITHUB)
         )
     }

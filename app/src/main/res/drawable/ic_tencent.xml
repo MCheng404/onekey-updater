@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 「腾讯应用宝」来源角标：纯平几何，蓝色圆角方块 + 向下箭头（下载语义）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#12B7F5"
+        android:pathData="M7,2 L17,2 A5,5 0 0 1 22,7 L22,17 A5,5 0 0 1 17,22
+                          L7,22 A5,5 0 0 1 2,17 L2,7 A5,5 0 0 1 7,2 Z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M11,7 L13,7 L13,12 L15.6,12 L12,15.6 L8.4,12 L11,12 Z" />
+</vector>

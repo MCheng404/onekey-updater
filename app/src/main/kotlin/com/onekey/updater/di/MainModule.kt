@@ -15,12 +15,14 @@ import com.onekey.updater.repository.GitHubRepository
 import com.onekey.updater.repository.GitLabRepository
 import com.onekey.updater.repository.PlayRepository
 import com.onekey.updater.repository.SearchRepository
+import com.onekey.updater.repository.TencentRepository
 import com.onekey.updater.repository.UpdatesRepository
 import com.onekey.updater.service.ApkMirrorService
 import com.onekey.updater.service.ApkPureService
 import com.onekey.updater.service.AptoideService
 import com.onekey.updater.service.FdroidService
 import com.onekey.updater.service.GitHubService
+import com.onekey.updater.service.TencentService
 import com.onekey.updater.service.GitLabService
 import com.onekey.updater.util.Badger
 import com.onekey.updater.util.Clipboard
@@ -128,6 +130,17 @@ val mainModule = module {
 	single {
 		Retrofit.Builder()
 			.client(get())
+			.baseUrl("https://upage.html5.qq.com")
+			.addConverterFactory(GsonConverterFactory.create(get()))
+			.build()
+			.create(TencentService::class.java)
+	}
+
+	single { TencentRepository(get(), get()) }
+
+	single {
+		Retrofit.Builder()
+			.client(get())
 			.baseUrl("https://gitlab.com")
 			.addConverterFactory(GsonConverterFactory.create(get()))
 			.build()
@@ -215,7 +228,12 @@ val mainModule = module {
 		FdroidRepository(get(), MirrorResolver.OFFICIAL_IZZY, IzzySource, get(), get(named("fdroidIndexDir")))
 	}
 
-	single { UpdatesRepository(get(), get(), get(), get(named("main")), get(named("izzy")), get(), get(), get(), get(), get()) }
+	single {
+		UpdatesRepository(
+			get(), get(), get(), get(named("main")), get(named("izzy")),
+			get(), get(), get(), get(), get(), get()
+		)
+	}
 
 	single { SearchRepository(get(), get(named("main")), get(named("izzy")), get(), get(), get(), get(), get(), get()) }
 

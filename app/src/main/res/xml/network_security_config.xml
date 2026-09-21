@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 仅对腾讯应用宝的 APK CDN 放行明文 HTTP。
+     实测 imtt.dd.qq.com 不支持 HTTPS（https 握手直接失败，只有 http 可用），
+     而 Android 9+ 默认禁止明文流量 —— 不放行的话应用宝来源的下载必然失败。
+     这里刻意**逐个域名单列**，而不是全局 usesCleartextTraffic=true，
+     把明文面收敛到最小。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">dd.qq.com</domain>
+        <domain includeSubdomains="true">qq.com</domain>
+    </domain-config>
+</network-security-config>

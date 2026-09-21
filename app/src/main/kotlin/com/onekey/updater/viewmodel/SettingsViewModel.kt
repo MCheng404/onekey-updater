@@ -82,6 +82,7 @@ class SettingsViewModel(
 	fun setUseAptoide(v: Boolean) = put { prefs.useAptoide.put(v) }
 	fun setUseApkPure(v: Boolean) = put { prefs.useApkPure.put(v) }
 	fun setUsePlay(v: Boolean) = put { prefs.usePlay.put(v) }
+	fun setUseTencent(v: Boolean) = put { prefs.useTencent.put(v) }
 
 	// ---------------- 过滤 ----------------
 
@@ -276,6 +277,7 @@ class SettingsViewModel(
 		useIzzy = prefs.useIzzy.get(),
 		useAptoide = prefs.useAptoide.get(),
 		useApkPure = prefs.useApkPure.get(),
+		useTencent = prefs.useTencent.get(),
 		usePlay = prefs.usePlay.get(),
 		ignoreAlpha = prefs.ignoreAlpha.get(),
 		ignoreBeta = prefs.ignoreBeta.get(),
