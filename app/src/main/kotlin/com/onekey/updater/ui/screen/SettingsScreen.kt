@@ -19,6 +19,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -542,22 +544,9 @@ private fun UiSection(s: SettingsSnapshot, vm: SettingsViewModel) {
 		selectedIndex = s.theme.coerceIn(ThemePref.SYSTEM, ThemePref.LIGHT),
 		onSelectedIndexChange = vm::setTheme
 	)
-	SliderPreference(
-		value = s.portraitColumns.toFloat(),
-		onValueChange = { vm.setPortraitColumns(it.toInt()) },
-		title = stringResource(R.string.settings_portrait_columns),
-		summary = s.portraitColumns.toString(),
-		valueRange = 1f..6f,
-		steps = 4
-	)
-	SliderPreference(
-		value = s.landscapeColumns.toFloat(),
-		onValueChange = { vm.setLandscapeColumns(it.toInt()) },
-		title = stringResource(R.string.settings_landscape_columns),
-		summary = s.landscapeColumns.toString(),
-		valueRange = 2f..8f,
-		steps = 5
-	)
+	// 原「竖屏列数 / 横屏列数」两个滑块已删除：
+	// 它们只写进偏好、**没有任何地方读取**（应用页早已是单列列表，不再有网格），
+	// 拖动完全不产生效果 —— 留着只会让人以为布局坏了。
 	Toggle(
 		stringResource(R.string.play_text_animations),
 		checked = s.playTextAnimations,
@@ -576,16 +565,94 @@ private fun ToolsSection(vm: SettingsViewModel) {
 	)
 }
 
+/**
+ * 关于。
+ *
+ * 此前这一行是**没有 onClick 的 ArrowPreference** —— 界面上画了一个表示"可进入"的箭头，
+ * 点击却什么都不发生，用户看到的就是「关于界面打不开」。
+ * 现在点开一个真正的关于弹窗：版本、包名、上游项目、本仓库、开源许可，链接可点。
+ */
 @Composable
 private fun AboutSection() {
 	SmallTitle(stringResource(R.string.about))
+
+	var showAbout by remember { mutableStateOf(false) }
+
 	ArrowPreference(
 		title = stringResource(R.string.app_name),
-		summary = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+		summary = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+		onClick = { showAbout = true }
 	)
-	if (BuildConfig.APPLICATION_ID != "com.onekey.updater") {
-		ArrowPreference(title = stringResource(R.string.app_cd), summary = BuildConfig.APPLICATION_ID)
+
+	if (showAbout) AboutDialog(onDismiss = { showAbout = false })
+}
+
+@Composable
+private fun AboutDialog(onDismiss: () -> Unit) {
+	val context = LocalContext.current
+
+	OverlayDialog(
+		show = true,
+		title = stringResource(R.string.about),
+		onDismissRequest = onDismiss
+	) {
+		Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+			AboutRow(stringResource(R.string.about_version), "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+			AboutRow(stringResource(R.string.about_package), context.packageName)
+			AboutLink(
+				label = stringResource(R.string.about_upstream),
+				value = UPSTREAM_URL,
+				context = context
+			)
+			AboutLink(
+				label = stringResource(R.string.about_project),
+				value = PROJECT_URL,
+				context = context
+			)
+			AboutRow(stringResource(R.string.about_license), "GPL-3.0")
+			Text(
+				text = stringResource(R.string.about_based_on),
+				style = MiuixTheme.textStyles.footnote2,
+				color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+				modifier = Modifier.padding(top = 6.dp)
+			)
+		}
+		Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+			Text(stringResource(R.string.close))
+		}
 	}
+}
+
+private const val UPSTREAM_URL = "https://github.com/rumboalla/apkupdater"
+private const val PROJECT_URL = "https://github.com/MCheng404/onekey-updater"
+
+@Composable
+private fun AboutRow(label: String, value: String) = Row(
+	modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+	horizontalArrangement = Arrangement.SpaceBetween
+) {
+	Text(label, style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+	Text(value, style = MiuixTheme.textStyles.footnote1)
+}
+
+/** 链接行：点击直接在浏览器打开，避免用户手动抄地址。 */
+@Composable
+private fun AboutLink(label: String, value: String, context: android.content.Context) = Row(
+	modifier = Modifier
+		.fillMaxWidth()
+		.padding(vertical = 3.dp)
+		.clickable {
+			runCatching {
+				context.startActivity(
+					android.content.Intent(android.content.Intent.ACTION_VIEW, value.toUri())
+						.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+				)
+			}
+		},
+	horizontalArrangement = Arrangement.SpaceBetween
+) {
+	Text(label, style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+	Text(value, style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.primary)
 }
 
 // ---------------------------------------------------------------- 网络诊断

@@ -49,7 +49,20 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  *
  * 现在改为：主线程只查缓存，未命中则丢到 IO 线程解码，完成后回填缓存并触发局部重组。
  */
-private object IconCache : LruCache<String, ImageBitmap>(400) {
+private object IconCache : LruCache<String, ImageBitmap>(
+    /*
+     * 按**字节**限流，而不是按条数。
+     *
+     * 原来写的是 `LruCache(400)` —— 400 条，而单张 195×195 的 ARGB_8888 位图约 152KB，
+     * 也就是缓存最多可占 **约 61MB**。滚动时这些位图长期驻留、又不断有新图进来，
+     * 会持续触发 GC，表现就是掉帧。改为按字节上限（约 20MB ≈ 130 张）后内存可控。
+     */
+    20 * 1024 * 1024
+) {
+
+    override fun sizeOf(key: String, value: ImageBitmap): Int =
+        value.width * value.height * 4
+
 
     fun key(packageName: String, sizePx: Int) = "$packageName@$sizePx"
 

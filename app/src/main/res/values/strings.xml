@@ -199,4 +199,12 @@
     <string name="proxy_host">Proxy host, e.g. 127.0.0.1</string>
     <string name="proxy_port">Proxy port</string>
     <string name="proxy_port_invalid">Port must be between 1 and 65535</string>
+
+    // About dialog
+    <string name="about_version">Version</string>
+    <string name="about_package">Package</string>
+    <string name="about_upstream">Upstream project</string>
+    <string name="about_project">Project home</string>
+    <string name="about_license">License</string>
+    <string name="about_based_on">Rebuilt from apkupdater 3.x, licensed under GPL-3.0.</string>
 </resources>

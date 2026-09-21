@@ -38,8 +38,6 @@ data class SettingsSnapshot(
 	// 界面
 	val theme: Int = 0,
 	val androidTvUi: Boolean = true,
-	val portraitColumns: Int = 3,
-	val landscapeColumns: Int = 6,
 	val playTextAnimations: Boolean = true,
 
 	// 定时检查

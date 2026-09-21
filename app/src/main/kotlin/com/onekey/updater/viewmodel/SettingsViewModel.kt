@@ -122,8 +122,6 @@ class SettingsViewModel(
 
 	fun setTheme(value: Int) = put { themer.setTheme(value) }
 	fun setAndroidTvUi(v: Boolean) = put { prefs.androidTvUi.put(v) }
-	fun setPortraitColumns(v: Int) = put { prefs.portraitColumns.put(v) }
-	fun setLandscapeColumns(v: Int) = put { prefs.landscapeColumns.put(v) }
 	fun setPlayTextAnimations(v: Boolean) = put { prefs.playTextAnimations.put(v) }
 
 	// ---------------- 定时检查 ----------------
@@ -340,8 +338,6 @@ class SettingsViewModel(
 		installMode = prefs.installMode.get(),
 		theme = prefs.theme.get(),
 		androidTvUi = prefs.androidTvUi.get(),
-		portraitColumns = prefs.portraitColumns.get(),
-		landscapeColumns = prefs.landscapeColumns.get(),
 		playTextAnimations = prefs.playTextAnimations.get(),
 		enableAlarm = prefs.enableAlarm.get(),
 		alarmHour = prefs.alarmHour.get(),
