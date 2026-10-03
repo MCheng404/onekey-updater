@@ -17,7 +17,8 @@ import com.onekey.updater.util.RootInstaller
 import com.onekey.updater.util.SessionInstaller
 import com.onekey.updater.util.SnackBar
 import com.onekey.updater.util.Stringer
-import com.onekey.updater.util.isRootInstall
+import com.onekey.updater.util.canSilentInstall
+import com.onekey.updater.util.silentInstall
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -89,9 +90,9 @@ abstract class InstallViewModel(
         when (val link = update.link) {
             Link.Empty -> throw IllegalStateException(stringer.get(R.string.no_download_link))
 
-            is Link.Url -> if (prefs.isRootInstall()) {
+            is Link.Url -> if (prefs.canSilentInstall()) {
                 val file = downloader.download(link.link)
-                val result = RootInstaller.install(file)
+                val result = prefs.silentInstall(listOf(file))
                 installLog.emitStatus(
                     AppInstallStatus(result.success, update.id, true, result.message.takeIf { !result.success })
                 )
@@ -102,7 +103,7 @@ abstract class InstallViewModel(
                 }
             }
 
-            is Link.Xapk -> if (prefs.isRootInstall()) {
+            is Link.Xapk -> if (prefs.canSilentInstall()) {
                 installer.installXapk(update.id, update.packageName, downloader.downloadStream(link.link).stream)
             } else {
                 throw IllegalStateException(stringer.get(R.string.xapk_requires_root))

@@ -207,4 +207,13 @@
     <string name="about_project">Project home</string>
     <string name="about_license">License</string>
     <string name="about_based_on">Rebuilt from apkupdater 3.x, licensed under GPL-3.0.</string>
+
+    // Shizuku
+    <string name="shizuku_enable">Use Shizuku for silent install</string>
+    <string name="shizuku_enable_summary">When Root is unavailable, use Shizuku (shell identity) to run pm install, so updates install without the system confirmation dialog.</string>
+    <string name="shizuku_status">Shizuku</string>
+    <string name="shizuku_running">Running · v%1$s</string>
+    <string name="shizuku_not_running">Not running — tap to open Shizuku</string>
+    <string name="shizuku_not_installed">Shizuku is not installed</string>
+    <string name="shizuku_disabled">Disabled</string>
 </resources>

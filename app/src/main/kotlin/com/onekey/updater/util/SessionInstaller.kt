@@ -334,8 +334,8 @@ class SessionInstaller(
                 }
             }
 
-            if (prefs.isRootInstall()) {
-                val result = RootInstaller.install(extracted)
+            if (prefs.canSilentInstall()) {
+                val result = prefs.silentInstall(extracted)
                 installLog.emitStatus(
                     AppInstallStatus(result.success, id, true, result.message.takeIf { !result.success })
                 )

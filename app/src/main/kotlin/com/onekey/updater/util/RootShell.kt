@@ -93,13 +93,38 @@ object RootShell {
      */
     private suspend fun probe(): ProbeResult = withContext(Dispatchers.IO) {
         runCatching {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-            val stdout = process.inputStream.bufferedReader().use(BufferedReader::readText)
-            val stderr = process.errorStream.bufferedReader().use(BufferedReader::readText)
-            // 限时等待：若 su 卡在授权弹窗（用户一直不点），最多等 20s 后就判定失败并回收进程，
-            // 避免 IO 协程被永久挂起。超时也按「未拿到 root」处理。
+            // redirectErrorStream(true)：把两个流合并成一路。
+            // 若分开读又串行读，读 stdout 期间 stderr 的管道缓冲区写满就会互相死锁。
+            val process = ProcessBuilder("su", "-c", "id")
+                .redirectErrorStream(true)
+                .start()
+
+            // **必须在独立线程里读流**。
+            // 原来是在主流程里直接 readText()，而 readText 会一直阻塞到流关闭；
+            // 只要 su 因为等待 KernelSU/Magisk 授权弹窗而迟迟不退出，
+            // 后面的 waitFor(超时) 就永远轮不到执行 —— 于是「20 秒超时」形同虚设，
+            // 探测会永久挂住并且一直占着 isAvailable 的 mutex，
+            // 后续 isRootInstall() 只能排队干等，静默安装路径永远走不到，
+            // 最终退回普通安装。这正是「明明已经 Root、安装时却还是普通安装」的成因。
+            var output = ""
+            val reader = Thread {
+                output = runCatching {
+                    process.inputStream.bufferedReader().use(BufferedReader::readText)
+                }.getOrDefault("")
+            }.apply { isDaemon = true }
+            reader.start()
+
             val finished = process.waitFor(PROBE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            val code = if (finished) process.exitValue() else { process.destroy(); -1 }
+            if (!finished) {
+                process.destroy()
+                reader.join(300)
+            } else {
+                // 进程已退出，再给读线程一点时间把剩余数据收干净
+                reader.join(1000)
+            }
+            val stdout = output
+            val stderr = ""
+            val code = if (finished) process.exitValue() else -1
             // 退出码 0 且 stdout 真出现 uid=0 才算拿到 root。
             // 有些 su 包装器即便未授权也返回 0，但 uid 不会是 0，所以必须校验输出内容。
             val granted = finished && code == 0 && stdout.contains("uid=0")
@@ -109,7 +134,7 @@ object RootShell {
                 stderr = stderr.trim(),
                 via = "su -c",
                 error = when {
-                    !finished -> "su 超时未返回（可能卡在授权弹窗）"
+                    !finished -> "su 在 ${PROBE_TIMEOUT_SECONDS}s 内未返回，多半是卡在授权弹窗上"
                     !granted && code != 0 -> "exit=$code"
                     else -> null
                 }

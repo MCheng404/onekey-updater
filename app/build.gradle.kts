@@ -26,8 +26,8 @@ android {
         applicationId = "com.onekey.updater" + System.getenv("BUILD_TAG").orEmpty()
         minSdk = 26
         targetSdk = 37
-        versionCode = if (buildNumber.isEmpty()) 58 else buildNumber.toInt()
-        versionName = if (buildNumber.isEmpty()) "3.2.0" else "0.0.$buildNumber"
+        versionCode = if (buildNumber.isEmpty()) 59 else buildNumber.toInt()
+        versionName = if (buildNumber.isEmpty()) "3.3.0" else "0.0.$buildNumber"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -84,6 +84,15 @@ android {
 }
 
 dependencies {
+
+    // Shizuku：没有 root 时的第二条静默安装通道。
+    // 只用它的 newProcess()（返回一个远程 Process），不写自定义 AIDL。
+    // 固定用 13.1.0：实测 13.1.5 已把 newProcess 收回为 private
+    // （javap 确认公开方法只剩 pingBinder/getBinder/getVersion），
+    // 而 13.1.0 仍然公开 newProcess —— 那正是本项目执行 pm install 需要的入口，
+    // 用它就不必自己写 AIDL + UserService。
+    implementation("dev.rikka.shizuku:api:13.1.0")
+    implementation("dev.rikka.shizuku:provider:13.1.0")
 
     // Compose BOM 2026.09.00 -> androidx.compose 1.12.1，与 Miuix 依赖的 CMP 1.12.0 对齐
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")

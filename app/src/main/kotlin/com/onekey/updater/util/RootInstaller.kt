@@ -34,6 +34,19 @@ object RootInstaller {
     ) = install(listOf(apk), allowDowngrade, grantPermissions)
 
     /**
+     * 走 Shizuku 的同一套安装逻辑。
+     *
+     * 之所以把执行器参数化而不是复制一份：分卷会话式安装那段逻辑（install-create →
+     * install-write → install-commit，以及任一步失败要 install-abandon）是踩过坑才写对的，
+     * 复制两份必然随时间走偏。这里只换「怎么执行命令」，安装流程本身保持唯一一份。
+     */
+    suspend fun installViaShizuku(
+        apks: List<File>,
+        allowDowngrade: Boolean = false,
+        grantPermissions: Boolean = false
+    ) = installWith(ShizukuShell::exec, apks, allowDowngrade, grantPermissions)
+
+    /**
      * @param apks 待安装的 APK 文件（可位于应用私有目录）
      * @param allowDowngrade 传 -d，允许版本降级
      * @param grantPermissions 传 -g，安装时授予全部运行时权限
@@ -42,14 +55,21 @@ object RootInstaller {
         apks: List<File>,
         allowDowngrade: Boolean = false,
         grantPermissions: Boolean = false
+    ): Result = installWith(RootShell::exec, apks, allowDowngrade, grantPermissions)
+
+    /**
+     * 安装流程本体。命令由 [exec] 执行，因此同一套逻辑既能跑在 su 上，也能跑在 Shizuku 上。
+     * 注意：这里**不再检查 root 是否可用**，可用性由调用方判断（两条通道的判断方式不同）。
+     */
+    private suspend fun installWith(
+        exec: suspend (String) -> ExecResult,
+        apks: List<File>,
+        allowDowngrade: Boolean,
+        grantPermissions: Boolean
     ): Result {
         if (apks.isEmpty()) return Result(false, "没有可安装的 APK")
         val invalid = apks.firstOrNull { !it.exists() || it.length() == 0L }
         if (invalid != null) return Result(false, "APK 文件不存在或为空: ${invalid.name}")
-
-        if (!RootShell.isAvailable()) {
-            return Result(false, "未获得 Root 权限")
-        }
 
         val staged = apks.map { "$STAGING_DIR/onekey-${randomUUID()}.apk" }
         return try {
@@ -67,13 +87,13 @@ object RootInstaller {
                         appendLine("chmod 644 ${quote(staged[i])} 2>/dev/null || true")
                     }
                 }
-                val stageResult = RootShell.exec(stageCmd)
+                val stageResult = exec(stageCmd)
                 if (!stageResult.success) {
                     return@withContext Result(false, "暂存 APK 失败: " + (stageResult.stderr.ifBlank { stageResult.stdout }).trim())
                 }
 
                 // 2) 安装到当前前台用户（兼容小米分身等多用户场景）
-                val user = currentUserId()
+                val user = currentUserId(exec)
                 val flags = buildString {
                     append(" -r")
                     if (allowDowngrade) append(" -d")
@@ -81,9 +101,9 @@ object RootInstaller {
                 }
                 val verb = if (staged.size > 1) "install-session" else "install"
                 val installResult = if (staged.size == 1) {
-                    RootShell.exec("pm install$flags --user $user ${quote(staged[0])}")
+                    exec("pm install$flags --user $user ${quote(staged[0])}")
                 } else {
-                    installSplits(staged, flags, user)
+                    installSplits(exec, staged, flags, user)
                 }
                 val output = installResult.stdout
                 Log.i(TAG, "pm $verb (user=$user) -> exit=${installResult.exitCode}\n$output")
@@ -102,7 +122,7 @@ object RootInstaller {
         } finally {
             // 3) 无论成败都清理暂存文件，避免 /data/local/tmp 堆积
             runCatching {
-                RootShell.exec("rm -f " + staged.joinToString(" ") { quote(it) })
+                exec("rm -f " + staged.joinToString(" ") { quote(it) })
             }
             apks.forEach { runCatching { it.delete() } }
         }
@@ -120,9 +140,14 @@ object RootInstaller {
      *   install-create -S <总字节> → install-write -S <单卷字节> <会话> <卷名> <路径> → install-commit
      * 任一步失败都要 install-abandon，否则残留的会话会占住 installd 的槽位。
      */
-    private suspend fun installSplits(staged: List<String>, flags: String, user: Int): ExecResult {
+    private suspend fun installSplits(
+        exec: suspend (String) -> ExecResult,
+        staged: List<String>,
+        flags: String,
+        user: Int
+    ): ExecResult {
         val total = staged.sumOf { File(it).length() }
-        val create = RootShell.exec("pm install-create$flags --user $user -S $total")
+        val create = exec("pm install-create$flags --user $user -S $total")
         val sessionId = SESSION_ID.find(create.stdout)?.groupValues?.get(1)
             ?: return ExecResult(
                 false, create.exitCode, create.stdout,
@@ -130,12 +155,12 @@ object RootInstaller {
             )
 
         for ((index, path) in staged.withIndex()) {
-            val write = RootShell.exec(
+            val write = exec(
                 "pm install-write -S ${File(path).length()} $sessionId split$index.apk ${quote(path)}"
             )
             // 卷名只要在会话内唯一即可，真正的分卷名来自各 APK 的清单
             if (!write.stdout.contains("Success", ignoreCase = true)) {
-                RootShell.exec("pm install-abandon $sessionId")
+                exec("pm install-abandon $sessionId")
                 return ExecResult(
                     false, write.exitCode, write.stdout,
                     "写入分卷 split$index.apk 失败：" + write.stdout.trim().ifBlank { write.stderr.trim() }
@@ -143,13 +168,13 @@ object RootInstaller {
             }
         }
 
-        return RootShell.exec("pm install-commit $sessionId")
+        return exec("pm install-commit $sessionId")
     }
 
-    /** 读取当前前台用户 id；失败时回退到 0。 */
-    private suspend fun currentUserId(): Int = runCatching {
+    /** 读取当前前台用户 id；失败时回退到 0。执行器由调用方传入，两条通道各用各的。 */
+    private suspend fun currentUserId(exec: suspend (String) -> ExecResult): Int = runCatching {
         // ExecResult.stdout 是整段字符串（不是行列表），因此这里按行切分后再取第一个整数
-        RootShell.exec("am get-current-user")
+        exec("am get-current-user")
             .stdout
             .lineSequence()
             .firstNotNullOfOrNull { it.trim().toIntOrNull() }

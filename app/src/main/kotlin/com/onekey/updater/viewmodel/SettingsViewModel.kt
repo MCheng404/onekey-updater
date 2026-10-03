@@ -9,6 +9,7 @@ import com.onekey.updater.prefs.Prefs
 import com.onekey.updater.repository.AppsRepository
 import com.onekey.updater.util.Clipboard
 import com.onekey.updater.util.RootShell
+import com.onekey.updater.util.ShizukuShell
 import com.onekey.updater.util.SnackBar
 import com.onekey.updater.util.Stringer
 import com.onekey.updater.util.Themer
@@ -230,6 +231,32 @@ class SettingsViewModel(
 		snackBar.snackBar(viewModelScope, "${best.label} · ${best.millis} ms")
 	}
 
+	// ---------------- Shizuku ----------------
+
+	fun setUseShizuku(v: Boolean) = put { prefs.useShizuku.put(v) }
+
+	/** Shizuku 状态，供设置页展示。 */
+	fun shizukuStatus(): String = when {
+		!prefs.useShizuku.get() -> stringer.get(com.onekey.updater.R.string.shizuku_disabled)
+		ShizukuShell.isRunning() ->
+			stringer.get(com.onekey.updater.R.string.shizuku_running, ShizukuShell.version())
+		else -> stringer.get(com.onekey.updater.R.string.shizuku_not_running)
+	}
+
+	/** 打开 Shizuku 管理器；未安装时提示用户自行安装。 */
+	fun openShizuku() {
+		// SettingsViewModel 没有持有 Context，这里从 Koin 取 Application
+		if (!ShizukuShell.openManager(
+				org.koin.java.KoinJavaComponent.get(android.app.Application::class.java)
+			)
+		) {
+			snackBar.snackBar(
+				viewModelScope,
+				stringer.get(com.onekey.updater.R.string.shizuku_not_installed)
+			)
+		}
+	}
+
 	// ---------------- 代理 ----------------
 
 	fun setProxyEnabled(v: Boolean) = put { prefs.proxyEnabled.put(v) }
@@ -350,6 +377,7 @@ class SettingsViewModel(
 		githubProxyId = prefs.githubProxyId.get(),
 		githubCustomProxy = prefs.githubCustomProxy.get(),
 		githubProxyDownloads = prefs.githubProxyDownloads.get(),
+		useShizuku = prefs.useShizuku.get(),
 		proxyEnabled = prefs.proxyEnabled.get(),
 		proxyType = prefs.proxyType.get(),
 		proxyHost = prefs.proxyHost.get(),

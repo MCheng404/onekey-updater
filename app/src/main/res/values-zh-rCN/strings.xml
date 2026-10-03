@@ -195,4 +195,13 @@
     <string name="about_project">项目主页</string>
     <string name="about_license">开源许可</string>
     <string name="about_based_on">基于 apkupdater 3.x 重构，遵循 GPL-3.0 许可。</string>
+
+    // Shizuku
+    <string name="shizuku_enable">使用 Shizuku 静默安装</string>
+    <string name="shizuku_enable_summary">没有 Root 时改用 Shizuku（shell 身份）执行 pm install，同样不需要弹系统安装确认框。</string>
+    <string name="shizuku_status">Shizuku</string>
+    <string name="shizuku_running">运行中 · v%1$s</string>
+    <string name="shizuku_not_running">未运行 — 点此打开 Shizuku</string>
+    <string name="shizuku_not_installed">尚未安装 Shizuku</string>
+    <string name="shizuku_disabled">已关闭</string>
 </resources>

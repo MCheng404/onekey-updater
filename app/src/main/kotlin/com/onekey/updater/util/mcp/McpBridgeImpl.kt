@@ -16,6 +16,8 @@ import com.onekey.updater.data.ui.TencentSource
 import com.onekey.updater.prefs.Prefs
 import com.onekey.updater.repository.UpdatesRepository
 import com.onekey.updater.util.AppLog
+import com.onekey.updater.util.canSilentInstall
+import com.onekey.updater.util.silentInstall
 import com.onekey.updater.util.Downloader
 import com.onekey.updater.util.RootInstaller
 import com.onekey.updater.util.RootShell
@@ -120,9 +122,9 @@ class McpBridgeImpl(
     private suspend fun installLink(update: AppUpdate): McpInstallResult = when (val link = update.link) {
         Link.Empty -> McpInstallResult(false, "该来源没有提供下载地址")
 
-        is Link.Url -> if (prefs.isRootInstall()) {
+        is Link.Url -> if (prefs.canSilentInstall()) {
             val file = downloader.download(link.link)
-            val result = RootInstaller.install(file)
+            val result = prefs.silentInstall(listOf(file))
             McpInstallResult(result.success, if (result.success) "Root 静默安装成功" else result.message)
         } else {
             if (!installer.checkPermission()) {
@@ -135,7 +137,7 @@ class McpBridgeImpl(
             McpInstallResult(ok, if (ok) "安装成功" else "安装被取消或失败，详情见设备上的提示")
         }
 
-        is Link.Xapk -> if (prefs.isRootInstall()) {
+        is Link.Xapk -> if (prefs.canSilentInstall()) {
             // 必须用真实结果：此前这里硬编码 true，导致安装实际失败（会话创建/写入报错）
             // 时也向调用方回报「已提交 Root 安装」，谎报成功。
             val ok = installer.installXapk(

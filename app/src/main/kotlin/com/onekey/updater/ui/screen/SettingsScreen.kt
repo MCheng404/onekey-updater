@@ -221,6 +221,18 @@ private fun InstallSection(s: SettingsSnapshot, vm: SettingsViewModel) {
 		onSelectedIndexChange = { vm.setInstallMode(it) }
 	)
 
+	Toggle(
+		stringResource(R.string.shizuku_enable),
+		summary = stringResource(R.string.shizuku_enable_summary),
+		checked = s.useShizuku,
+		onChange = vm::setUseShizuku
+	)
+	ArrowPreference(
+		title = stringResource(R.string.shizuku_status),
+		summary = vm.shizukuStatus(),
+		onClick = { vm.openShizuku() }
+	)
+
 	ArrowPreference(
 		title = stringResource(R.string.root_status),
 		summary = when (rootState) {
