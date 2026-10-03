@@ -66,7 +66,18 @@ class SearchRepository(
                         slots[index] = emptyList()
                     }
 
-                val merged = slots.filterNotNull().flatten().sortedBy { it.name }
+                val merged = slots.filterNotNull().flatten()
+                    // **必须按包名去重**：同一个应用可能同时出现在多个来源里，
+                    // 而界面用 AppUpdate.id 作 LazyColumn 的 key，重复 key 会让 Compose 直接抛异常。
+                    // 这正是「结果非常多时才崩」的成因 —— 结果越多，撞上重复的概率越高。
+                    // 保留哪一个：版本号更高的那个（更可能是可安装的最新版）。
+                    .groupBy { it.packageName }
+                    .map { (_, same) -> same.maxByOrNull { it.versionCode } ?: same.first() }
+                    // 相关度排序：搜包名时，精确匹配必须排第一，否则用户要找的应用被埋在中间
+                    .sortedWith(
+                        compareByDescending<AppUpdate> { relevance(it, text) }
+                            .thenBy { it.name.lowercase() }
+                    )
                 val settled = slots.all { it != null }
                 if (merged.isNotEmpty() || settled) {
                     val error = firstError
@@ -89,3 +100,26 @@ private fun Flow<Result<List<AppUpdate>>>.withDeadline(millis: Long) = this
         if (t !is TimeoutCancellationException) Log.e("SearchRepository", "源异常，已跳过。", t)
         emit(Result.success(emptyList()))
     }
+
+/**
+ * 搜索结果的相关度（越大越靠前）。
+ *
+ * 排序依据是「用户输入与结果的对应强度」，而不是来源顺序或名称字母序：
+ * 搜 `com.tencent.mm` 时精确命中包名的结果必须排在最前，
+ * 搜 `wechat` 时名称完全相等也要排在名称只是「包含」的结果之前。
+ */
+private fun relevance(update: AppUpdate, query: String): Int {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return 0
+    val pkg = update.packageName.lowercase()
+    val name = update.name.lowercase()
+    return when {
+        pkg == q -> 100          // 搜的正是这个包
+        name.equals(q, true) -> 90
+        pkg.startsWith(q) -> 80
+        name.startsWith(q) -> 70
+        pkg.contains(q) -> 60
+        name.contains(q) -> 50
+        else -> 0                 // 命中不了，排在所有有关联结果之后
+    }
+}

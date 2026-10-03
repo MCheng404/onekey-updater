@@ -19,6 +19,7 @@ import com.onekey.updater.util.SnackBar
 import com.onekey.updater.util.Stringer
 import com.onekey.updater.util.canSilentInstall
 import com.onekey.updater.util.silentInstall
+import com.onekey.updater.util.silentInstall
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -110,15 +111,25 @@ abstract class InstallViewModel(
             }
 
             is Link.Play -> {
-                requireInstallPermission()
                 val files = link.getInstallFiles()
                 if (files.isEmpty()) throw IllegalStateException(stringer.get(R.string.no_download_link))
-                val size = files.sumOf { it.size }
-                val streams = files.map { downloader.downloadStream(it.url) }
-                try {
-                    installer.install(update.id, update.packageName, streams.map { it.stream }, size)
-                } finally {
-                    streams.forEach { runCatching { it.close() } }
+                if (prefs.canSilentInstall()) {
+                    // Play 给的是一组分卷 APK。静默通道同样能装多包
+                    // （RootInstaller 的会话式分卷安装），不必再退回系统安装器弹窗。
+                    val apks = files.map { downloader.download(it.url) }
+                    val result = prefs.silentInstall(apks)
+                    installLog.emitStatus(
+                        AppInstallStatus(result.success, update.id, true, result.message.takeIf { !result.success })
+                    )
+                } else {
+                    requireInstallPermission()
+                    val size = files.sumOf { it.size }
+                    val streams = files.map { downloader.downloadStream(it.url) }
+                    try {
+                        installer.install(update.id, update.packageName, streams.map { it.stream }, size)
+                    } finally {
+                        streams.forEach { runCatching { it.close() } }
+                    }
                 }
             }
         }

@@ -18,6 +18,7 @@ import com.onekey.updater.repository.UpdatesRepository
 import com.onekey.updater.util.AppLog
 import com.onekey.updater.util.canSilentInstall
 import com.onekey.updater.util.silentInstall
+import com.onekey.updater.util.silentInstall
 import com.onekey.updater.util.Downloader
 import com.onekey.updater.util.RootInstaller
 import com.onekey.updater.util.RootShell
@@ -152,11 +153,20 @@ class McpBridgeImpl(
         }
 
         is Link.Play -> {
+            val files = link.getInstallFiles()
+            if (files.isEmpty()) return McpInstallResult(false, "Play 来源未返回任何安装文件")
+            if (prefs.canSilentInstall()) {
+                // 与界面侧保持一致：有静默通道就静默装，不弹系统安装器
+                val apks = files.map { downloader.download(it.url) }
+                val result = prefs.silentInstall(apks)
+                return McpInstallResult(
+                    result.success,
+                    if (result.success) "静默安装成功" else result.message
+                )
+            }
             if (!installer.checkPermission()) {
                 return McpInstallResult(false, "缺少「安装未知应用」权限，请在设备上授予后重试")
             }
-            val files = link.getInstallFiles()
-            if (files.isEmpty()) return McpInstallResult(false, "Play 来源未返回任何安装文件")
             val streams = files.map { downloader.downloadStream(it.url) }
             val ok = try {
                 installer.install(

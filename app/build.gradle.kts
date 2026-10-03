@@ -26,8 +26,8 @@ android {
         applicationId = "com.onekey.updater" + System.getenv("BUILD_TAG").orEmpty()
         minSdk = 26
         targetSdk = 37
-        versionCode = if (buildNumber.isEmpty()) 60 else buildNumber.toInt()
-        versionName = if (buildNumber.isEmpty()) "3.4.0" else "0.0.$buildNumber"
+        versionCode = if (buildNumber.isEmpty()) 61 else buildNumber.toInt()
+        versionName = if (buildNumber.isEmpty()) "3.4.1" else "0.0.$buildNumber"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
