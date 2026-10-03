@@ -18,10 +18,15 @@ impl UpdateSource for PipSource {
         log("info", tr!("pip.checking"));
 
         // --disable-pip-version-check：省掉"检查 pip 自身是否有新版"的那次网络往返
-        // 退出码必须参与判定：pip 在网络中断 / Python 环境异常时以非 0 退出
-        // 且 stdout 不是合法 JSON。只看 stdout 会把"检查失败"当成
-        // "没有可更新项"，打绿色 OK 谎报全部最新。
-        let (code, out) = match run_capture_status(
+        // 退出码在这里帮不上忙，实测过：
+        //   无更新           → exit=0，输出 []
+        //   源不可达(超时)    → exit=0，输出 []   ← pip 静默降级，不报错
+        //   参数非法         → exit=2
+        // 也就是说 pip 在"源挂了"时同样给不出任何可判别的信号，
+        // 唯一可靠的仍是**能否解析出合法 JSON 数组**。
+        // 空数组 `[]` = 确实没有可更新项（报绿色 OK）；
+        // 解析不出数组 = 真失败（registry 损坏 / pip 自身异常），必须说清楚。
+        let (_code, out) = match run_capture_status(
             "pip",
             &["list", "--outdated", "--format=json", "--disable-pip-version-check"],
             45,
@@ -32,19 +37,27 @@ impl UpdateSource for PipSource {
                 return vec![];
             }
         };
-        if code != 0 {
-            let detail = out.trim().lines().next().unwrap_or("").to_string();
-            log(
-                "err",
-                tr!("pip.checkFailed", if detail.is_empty() { code.to_string() } else { detail }),
-            );
-            return vec![];
-        }
 
         let arr = match extract_json_array(&out) {
             Some(s) => s,
             None => {
-                log("ok", tr!("pip.allLatest"));
+                // 空数组是合法 JSON，能解析 → 才是真的"全部最新"
+                match serde_json::from_str::<serde_json::Value>(out.trim()) {
+                    Ok(v) if v.as_array().map(|a| a.is_empty()).unwrap_or(false) => {
+                        log("ok", tr!("pip.allLatest"));
+                    }
+                    _ => {
+                        let detail = out
+                            .lines()
+                            .map(str::trim)
+                            .find(|l| !l.is_empty() && *l != "[")
+                            .unwrap_or("unknown error")
+                            .chars()
+                            .take(120)
+                            .collect::<String>();
+                        log("err", tr!("pip.checkFailed", detail));
+                    }
+                }
                 return vec![];
             }
         };

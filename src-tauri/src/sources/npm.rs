@@ -27,29 +27,47 @@ impl UpdateSource for NpmSource {
     fn check(&self, log: LogFn) -> Vec<UpdateItem> {
         log("info", tr!("npm.checking"));
 
-        // 退出码必须参与判定：npm outdated 在 registry 离线、依赖树损坏时
-        // 会以非 0 退出且 stdout 不是合法 JSON。原先只看 stdout，
-        // 于是这种"检查失败"会被当成"没有可更新项"→ 打绿色 OK 谎报全部最新。
-        let (code, out) = match run_capture_status("npm", &["outdated", "-g", "--json"], 45) {
+        // ⚠️ 不能用退出码判断成败。`npm outdated -g --json` 在**有可更新项时
+        // 就以退出码 1 结束**（npm 用它表示"发现了 outdated"）。实测：
+        //   有可更新项        → exit=1，stdout 是合法 JSON
+        //   参数非法(EUNKNOWNCONFIG) → exit=1，stdout 是 npm error 文本
+        // 两者退出码完全相同，**唯一可靠的判据是能否解析出合法 JSON**。
+        //
+        // 原先这里只看 stdout、把"解析不出 JSON"一律当成"全部最新"，
+        // 会在 registry 离线等真失败时打绿色 OK 谎报；上一轮改成看退出码
+        // 之后又走向另一头：正常的更新检查被判成检查失败。
+        let (_code, out) = match run_capture_status("npm", &["outdated", "-g", "--json"], 45) {
             Ok(v) => v,
             Err(e) => {
                 log("err", tr!("npm.checkFailed", e));
                 return vec![];
             }
         };
-        if code != 0 {
-            let detail = out.trim().lines().next().unwrap_or("").to_string();
-            log(
-                "err",
-                tr!("npm.checkFailed", if detail.is_empty() { code.to_string() } else { detail }),
-            );
-            return vec![];
-        }
 
         let json_part = match extract_json_object(&out) {
             Some(s) => s,
             None => {
-                log("ok", tr!("npm.allLatest"));
+                // 分不清"没解析出 JSON"与"解析出空对象"就一定会出错：
+                // registry 离线 / 依赖树损坏时 stdout 是 npm error 文本，
+                // 此时若也报"全部是最新版本"，就是在真失败时给用户一个绿色 OK。
+                // 判据：空对象 `{}` 是合法 JSON，能解析 → 才是真的没更新。
+                match serde_json::from_str::<serde_json::Value>(out.trim()) {
+                    Ok(v) if v.as_object().map(|o| o.is_empty()).unwrap_or(false) => {
+                        log("ok", tr!("npm.allLatest"));
+                    }
+                    _ => {
+                        // 摘出第一行可读信息，避免把整段 JSON/错误堆栈塞进日志
+                        let detail = out
+                            .lines()
+                            .map(str::trim)
+                            .find(|l| !l.is_empty() && *l != "{")
+                            .unwrap_or("unknown error")
+                            .chars()
+                            .take(120)
+                            .collect::<String>();
+                        log("err", tr!("npm.parseFailed", detail));
+                    }
+                }
                 return vec![];
             }
         };
