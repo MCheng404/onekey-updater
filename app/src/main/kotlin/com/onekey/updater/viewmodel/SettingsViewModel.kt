@@ -234,6 +234,7 @@ class SettingsViewModel(
 	// ---------------- Shizuku ----------------
 
 	fun setUseShizuku(v: Boolean) = put { prefs.useShizuku.put(v) }
+	fun setConfirmIgnore(v: Boolean) = put { prefs.confirmIgnore.put(v) }
 
 	/** Shizuku 状态，供设置页展示。 */
 	fun shizukuStatus(): String = when {
@@ -378,6 +379,7 @@ class SettingsViewModel(
 		githubCustomProxy = prefs.githubCustomProxy.get(),
 		githubProxyDownloads = prefs.githubProxyDownloads.get(),
 		useShizuku = prefs.useShizuku.get(),
+		confirmIgnore = prefs.confirmIgnore.get(),
 		proxyEnabled = prefs.proxyEnabled.get(),
 		proxyType = prefs.proxyType.get(),
 		proxyHost = prefs.proxyHost.get(),

@@ -57,6 +57,7 @@ data class SettingsSnapshot(
 
 	// MCP 服务（让 PC 上的 AI Agent 远程控制更新器）
 	val useShizuku: Boolean = true,
+	val confirmIgnore: Boolean = true,
 
 	val proxyEnabled: Boolean = false,
 	val proxyType: Int = 0,

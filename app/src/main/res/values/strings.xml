@@ -216,4 +216,19 @@
     <string name="shizuku_not_running">Not running — tap to open Shizuku</string>
     <string name="shizuku_not_installed">Shizuku is not installed</string>
     <string name="shizuku_disabled">Disabled</string>
+
+    // 主题
+    <string name="theme_dynamic">Material You (system)</string>
+    <string name="theme_dark_pure">Pure black (AMOLED)</string>
+
+    // 应用列表与刷新态
+    <string name="refreshing_apps">Refreshing installed apps…</string>
+    <string name="refreshing_updates">Checking for updates…</string>
+    <string name="app_version_line">Version %1$s</string>
+    <string name="app_tag_system">System</string>
+    <string name="ignore_confirm_title">Ignore this app?</string>
+    <string name="ignore_confirm_summary">%1$s will no longer be checked for updates. You can undo this later.</string>
+    <string name="ignore_confirm_ok">Ignore</string>
+    <string name="confirm_ignore">Confirm before ignoring</string>
+    <string name="confirm_ignore_summary">Show a confirmation dialog when you ignore an app.</string>
 </resources>

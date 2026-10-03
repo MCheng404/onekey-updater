@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.onekey.updater.util.isSystemApp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -142,6 +143,8 @@ fun InstalledCard(
     modifier: Modifier = Modifier,
     onIgnore: () -> Unit
 ) {
+    // 系统应用判定带缓存（AppInfoCache），逐项调用不会产生跨进程查询
+    val context = LocalContext.current
     Card(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp),
@@ -167,6 +170,30 @@ fun InstalledCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                // 补上版本与系统应用标记：只看得到名字和包名时，
+                // 用户无法判断「是不是同一个应用」「是不是系统自带」。
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.app_version_line,
+                            app.version.ifBlank { "?" }
+                        ),
+                        style = MiuixTheme.textStyles.footnote2,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        maxLines = 1
+                    )
+                    if (context.isSystemApp(app.packageName)) {
+                        Text(
+                            text = stringResource(R.string.app_tag_system),
+                            style = MiuixTheme.textStyles.footnote2,
+                            color = MiuixTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.width(8.dp))

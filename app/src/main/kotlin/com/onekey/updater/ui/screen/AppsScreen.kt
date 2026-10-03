@@ -10,6 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.padding
 import top.yukonga.miuix.kmp.basic.Text
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.onekey.updater.ui.component.RefreshingView
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import com.onekey.updater.data.ui.AppInstalled
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -36,6 +43,14 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 fun AppsScreen(viewModel: AppsViewModel) {
 	val state = viewModel.state().collectAsStateWithLifecycle().value
 	val refreshing = viewModel.refreshing().collectAsStateWithLifecycle().value
+	// 「忽略」是破坏性且不易撤销的操作，加一道二次确认；
+	// 用户可在设置里关掉（prefs.confirmIgnore）。
+	var pendingIgnore by remember { mutableStateOf<AppInstalled?>(null) }
+	// 二次确认可关闭：设置里关掉后直接执行，保持一次点击的效率
+	val confirmEnabled = viewModel.confirmIgnore()
+	val onIgnoreRequest: (AppInstalled) -> Unit = { target ->
+		if (confirmEnabled) pendingIgnore = target else viewModel.ignore(target.packageName)
+	}
 
 	Column {
 		SmallTopAppBar(
@@ -70,7 +85,10 @@ fun AppsScreen(viewModel: AppsViewModel) {
 			isRefreshing = refreshing,
 			onRefresh = { viewModel.refresh(load = false) }
 		) {
-			when (state) {
+			// 刷新中：只显示居中文字与动效，不铺列表
+			if (refreshing) {
+				RefreshingView(stringResource(R.string.refreshing_apps))
+			} else when (state) {
 				is AppsUiState.Loading -> LoadingList()
 
 				AppsUiState.Error -> ErrorState()
@@ -88,11 +106,20 @@ fun AppsScreen(viewModel: AppsViewModel) {
 							}
 						}
 						items(state.apps, key = { it.packageName }) { app ->
-							InstalledCard(app) { viewModel.ignore(app.packageName) }
+							InstalledCard(app) { onIgnoreRequest(app) }
 						}
 					}
 				}
 			}
+		}
+
+		// 二次确认弹窗。放在 Scaffold 内部、与内容同层，关闭即回到原状态。
+		pendingIgnore?.let { target ->
+			IgnoreConfirmDialog(
+				app = target,
+				onConfirm = { viewModel.ignore(target.packageName) },
+				onDismiss = { pendingIgnore = null }
+			)
 		}
 	}
 }
@@ -174,6 +201,38 @@ private fun AppListPermissionHint(count: Int) {
 			) {
 				Text(stringResource(R.string.app_list_permission_action))
 			}
+		}
+	}
+}
+
+/** 「忽略」的二次确认。confirmIgnore 关闭时由调用方直接执行，不走这里。 */
+@Composable
+private fun IgnoreConfirmDialog(
+	app: AppInstalled,
+	onConfirm: () -> Unit,
+	onDismiss: () -> Unit
+) = OverlayDialog(
+	show = true,
+	title = stringResource(R.string.ignore_confirm_title),
+	onDismissRequest = onDismiss
+) {
+	Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+		Text(
+			text = stringResource(R.string.ignore_confirm_summary, app.name.ifEmpty { app.packageName }),
+			style = MiuixTheme.textStyles.footnote1,
+			color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+		)
+		Button(
+			onClick = { onConfirm(); onDismiss() },
+			modifier = Modifier.fillMaxWidth()
+		) {
+			Text(stringResource(R.string.ignore_confirm_ok))
+		}
+		Button(
+			onClick = onDismiss,
+			modifier = Modifier.fillMaxWidth()
+		) {
+			Text(stringResource(R.string.close))
 		}
 	}
 }

@@ -204,4 +204,19 @@
     <string name="shizuku_not_running">未运行 — 点此打开 Shizuku</string>
     <string name="shizuku_not_installed">尚未安装 Shizuku</string>
     <string name="shizuku_disabled">已关闭</string>
+
+    // 主题
+    <string name="theme_dynamic">动态取色（跟随系统）</string>
+    <string name="theme_dark_pure">纯黑（AMOLED）</string>
+
+    // 应用列表与刷新态
+    <string name="refreshing_apps">正在读取已安装应用…</string>
+    <string name="refreshing_updates">正在检查更新…</string>
+    <string name="app_version_line">版本 %1$s</string>
+    <string name="app_tag_system">系统应用</string>
+    <string name="ignore_confirm_title">要忽略这个应用吗？</string>
+    <string name="ignore_confirm_summary">%1$s 将不再检查更新，之后可以取消忽略。</string>
+    <string name="ignore_confirm_ok">忽略</string>
+    <string name="confirm_ignore">忽略前二次确认</string>
+    <string name="confirm_ignore_summary">忽略应用时弹出确认框，避免误触。</string>
 </resources>

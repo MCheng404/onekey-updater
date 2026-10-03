@@ -75,6 +75,9 @@ class AppsViewModel(
 
 	fun onDisabledClick() = toggleFilter { prefs.excludeDisabled.put(!prefs.excludeDisabled.get()) }
 
+	/** 忽略前是否需要二次确认（设置里可关）。 */
+	fun confirmIgnore(): Boolean = prefs.confirmIgnore.get()
+
 	fun ignore(packageName: String) = viewModelScope.launch(Dispatchers.IO) {
 		val ignored = prefs.ignoredApps.get().toMutableList()
 		if (ignored.contains(packageName)) ignored.remove(packageName) else ignored.add(packageName)

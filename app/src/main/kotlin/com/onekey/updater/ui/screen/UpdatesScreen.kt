@@ -27,6 +27,7 @@ import com.onekey.updater.ui.component.AppList
 import com.onekey.updater.ui.component.EmptyState
 import com.onekey.updater.ui.component.ErrorState
 import com.onekey.updater.ui.component.LoadingList
+import com.onekey.updater.ui.component.RefreshingView
 import com.onekey.updater.ui.component.UpdateGroupCard
 import com.onekey.updater.ui.component.groupByPackage
 import com.onekey.updater.util.isSystemApp
@@ -99,7 +100,10 @@ fun UpdatesScreen(viewModel: UpdatesViewModel) {
 			// 下拉刷新不显示骨架屏，避免列表整体闪一下
 			onRefresh = { viewModel.refresh(load = false) }
 		) {
-			when (state) {
+			// 刷新中：只显示居中文字与动效，不铺列表
+			if (refreshing) {
+				RefreshingView(stringResource(R.string.refreshing_updates))
+			} else when (state) {
 				UpdatesUiState.Loading -> LoadingList()
 
 				UpdatesUiState.Error -> ErrorState()

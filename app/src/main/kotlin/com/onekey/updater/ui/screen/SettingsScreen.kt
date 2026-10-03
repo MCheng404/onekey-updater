@@ -222,6 +222,12 @@ private fun InstallSection(s: SettingsSnapshot, vm: SettingsViewModel) {
 	)
 
 	Toggle(
+		stringResource(R.string.confirm_ignore),
+		summary = stringResource(R.string.confirm_ignore_summary),
+		checked = s.confirmIgnore,
+		onChange = vm::setConfirmIgnore
+	)
+	Toggle(
 		stringResource(R.string.shizuku_enable),
 		summary = stringResource(R.string.shizuku_enable_summary),
 		checked = s.useShizuku,
@@ -551,9 +557,11 @@ private fun UiSection(s: SettingsSnapshot, vm: SettingsViewModel) {
 		items = listOf(
 			stringResource(R.string.theme_system),
 			stringResource(R.string.theme_dark),
-			stringResource(R.string.theme_light)
+			stringResource(R.string.theme_light),
+			stringResource(R.string.theme_dynamic),
+			stringResource(R.string.theme_dark_pure)
 		),
-		selectedIndex = s.theme.coerceIn(ThemePref.SYSTEM, ThemePref.LIGHT),
+		selectedIndex = s.theme.coerceIn(ThemePref.SYSTEM, ThemePref.DARK_PURE),
 		onSelectedIndexChange = vm::setTheme
 	)
 	// 原「竖屏列数 / 横屏列数」两个滑块已删除：

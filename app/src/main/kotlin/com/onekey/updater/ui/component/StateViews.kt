@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -110,4 +111,31 @@ fun LoadingIndicator(modifier: Modifier = Modifier) = Box(
         size = 44.dp,
         modifier = Modifier.padding(4.dp)
     )
+}
+
+/**
+ * 刷新态：居中文字 + 循环动效，**不显示列表**。
+ *
+ * 之前刷新时列表照常铺在下面，只有顶栏一个小转圈，
+ * 既看不清「正在刷新」，又会让人对着半截旧数据反复滚动。
+ */
+@Composable
+fun RefreshingView(
+    text: String,
+    modifier: Modifier = Modifier
+) = Box(
+    modifier = modifier.fillMaxSize(),
+    contentAlignment = Alignment.Center
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        CircularProgressIndicator(modifier = Modifier.size(34.dp))
+        Text(
+            text = text,
+            style = MiuixTheme.textStyles.footnote1,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+        )
+    }
 }
