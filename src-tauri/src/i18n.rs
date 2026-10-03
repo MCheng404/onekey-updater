@@ -238,6 +238,11 @@ static TABLE: &[(&str, &str, &str)] = &[
         "{} installed, but the gateway did not restart (the port may be in use). Run openclaw gateway install --force manually.",
     ),
     (
+        "openclaw.installMismatch",
+        "注意：npm 的全局安装位置与实际使用的位置不一致 —— 正在使用 {}，而新版本会装到 {}（PATH 命中：{}）。这会导致「更新成功但版本不变」。请让两处统一，例如执行 npm config delete prefix 恢复默认位置后重试。",
+        "Note: the npm global install location differs from the one actually in use - currently {} is used, while new versions install to {} (PATH resolves to: {}). This causes \"update succeeds but the version never changes\". Make them match, for example by running npm config delete prefix to restore the default and retrying.",
+    ),
+    (
         "openclaw.stopFailed",
         "未能停止正在运行的 gateway（将继续安装，但新版本可能无法接管端口）",
         "Could not stop the running gateway (installing continues, but the new version may not take over the port)",

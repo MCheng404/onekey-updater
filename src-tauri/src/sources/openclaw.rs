@@ -24,6 +24,17 @@ impl UpdateSource for OpenclawSource {
         let current = extract_version(&raw);
         log("cmd", tr!("openclaw.current", current));
 
+        // 探测"装的位置"与"用的位置"是否一致。
+        //
+        // `openclaw --version` 走 PATH，只反映**当前生效**的那一份；而
+        // `npm i -g` 按 npm 的 global prefix 装，**两者可以不是同一个目录**。
+        // 一旦不一致（多半是历史上有人改过 prefix，或多份安装并存），
+        // 就会出现"更新装成功了，但永远显示可更新"的死循环 —— 用户点更新、
+        // npm 报成功、版本号纹丝不动，app 还查不出原因。
+        if let Some(warn) = check_install_location_mismatch(log) {
+            log("warn", warn);
+        }
+
         // 一次 npm view 拿全部 dist-tag（latest / beta），替代两次独立查询 ——
         // 这是 OpenClaw 源在"检查更新"阶段的主要耗时。
         let tags = npm_dist_tags("openclaw");
@@ -247,4 +258,106 @@ fn extract_version(raw: &str) -> String {
     }
 
     fallback.unwrap_or_else(|| raw.trim().to_string())
+}
+
+/// 比较「npm 全局安装位置」与「PATH 实际命中位置」，不一致时给出告警文案。
+///
+/// 背景：`openclaw --version` 走 PATH，只反映**当前生效**的那一份；
+/// `npm i -g` 却按 npm 的 global prefix 装。两者可以不是同一个目录。
+/// 一旦不一致，就会出现最难排查的那种症状 ——
+/// "更新装成功了，但版本号永远不变、永远提示可更新"。
+///
+/// 只做提示，不阻断检查：prefix 不一致本身不是错误状态
+/// （比如用户有意用非默认 prefix），但它几乎一定是"更新不生效"的根因，
+/// 必须让用户看见。
+fn check_install_location_mismatch(log: LogFn) -> Option<String> {
+    // 1) npm 的全局 prefix（决定新包装到哪）
+    let prefix = run_capture_with_timeout("npm", &["prefix", "-g"], 15).ok()?;
+    let prefix = prefix
+        .trim()
+        .trim_end_matches([char::from(b'\\'), char::from(b'/')])
+        .to_string();
+    if prefix.is_empty() {
+        return None;
+    }
+
+    // 2) PATH 上实际命中的 openclaw（决定"用的"是哪一份）
+    // ⚠️ 这里**不能**再包一层 cmd：base_command 已经生成 `cmd /D /C <program> <args>`，
+    // 写成 ("cmd", &["/C", "where", ...]) 会变成 `cmd /D /C cmd /C where ...` ——
+    // 内层 cmd 被当作"要执行的程序名"而不是命令，输出不是 where 的结果，
+    // 退出码非 0，下面的 `?` 直接早退，告警永远不会打印（实测过：静默失效）。
+    let which_out = run_capture_with_timeout("where", &["openclaw"], 15).ok()?;
+    let on_path: Vec<String> = which_out
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(|l| l.to_string())
+        .collect();
+    let first = on_path.first()?;
+
+    // 3) 对比（抽成纯函数 install_locations_match，便于真正单测）
+    if install_locations_match(&prefix, first) {
+        return None; // 一致
+    }
+
+    // 不一致：报出双方具体位置，便于用户自行处理
+    let _ = log;
+    Some(tr!(
+        "openclaw.installMismatch",
+        first,
+        prefix,
+        on_path.join(", ")
+    ))
+}
+
+
+/// 判断「PATH 命中的 openclaw」是否位于「npm 全局 prefix」之下。
+///
+/// 抽成纯函数是为了能真正单测：这段逻辑一旦出错，症状是**静默不告警** ——
+/// 错配时什么都不说，用户永远查不到根因。第一版就栽在这里：
+/// 把 `where` 外面又包了一层 shell 控制指令，被 base_command 再包一层之后
+/// 内层那个变成了「要执行的程序名」，`where` 永远失败，`?` 直接早退，
+/// 告警一次都没打印出来（实机验证时才发现日志里 0 次告警）。
+fn install_locations_match(prefix: &str, on_path_first: &str) -> bool {
+    let sep = char::from(b'\\').to_string();
+    let normalize = |s: &str| s.to_lowercase().replace('/', &sep);
+    normalize(on_path_first).starts_with(&normalize(prefix))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::install_locations_match;
+
+    #[test]
+    fn same_dir_is_a_match() {
+        assert!(install_locations_match(
+            r"C:\Users\Cookies\AppData\Roaming\npm",
+            r"C:\Users\Cookies\AppData\Roaming\npm\openclaw",
+        ));
+    }
+
+    /// 这正是「装新的、用旧的」：新包装到 .local，PATH 命中的却是 AppData
+    #[test]
+    fn another_prefix_is_a_mismatch() {
+        assert!(!install_locations_match(
+            r"C:\Users\Cookies\.local",
+            r"C:\Users\Cookies\AppData\Roaming\npm\openclaw",
+        ));
+    }
+
+    #[test]
+    fn case_and_slash_differences_still_match() {
+        assert!(install_locations_match(
+            "c:/users/cookies/appdata/roaming/npm",
+            r"C:\Users\Cookies\AppData\Roaming\npm\openclaw.cmd",
+        ));
+    }
+
+    #[test]
+    fn trailing_separator_on_prefix_is_tolerated() {
+        assert!(install_locations_match(
+            r"C:\Users\Cookies\AppData\Roaming\npm\",
+            r"C:\Users\Cookies\AppData\Roaming\npm\openclaw",
+        ));
+    }
 }
