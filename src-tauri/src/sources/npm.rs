@@ -1,7 +1,10 @@
 use crate::model::{Source, UpdateItem};
 use crate::tr;
 use crate::sources::{LogFn, UpdateSource};
-use crate::util::{cmd_exists, compare_version, extract_json_object, par_map, run_capture_with_timeout, run_stream};
+use crate::util::{
+    cmd_exists, compare_version, extract_json_object, par_map, run_capture_status,
+    run_capture_with_timeout, run_stream,
+};
 
 pub struct NpmSource;
 
@@ -24,13 +27,24 @@ impl UpdateSource for NpmSource {
     fn check(&self, log: LogFn) -> Vec<UpdateItem> {
         log("info", tr!("npm.checking"));
 
-        let out = match run_capture_with_timeout("npm", &["outdated", "-g", "--json"], 45) {
-            Ok(o) => o,
+        // 退出码必须参与判定：npm outdated 在 registry 离线、依赖树损坏时
+        // 会以非 0 退出且 stdout 不是合法 JSON。原先只看 stdout，
+        // 于是这种"检查失败"会被当成"没有可更新项"→ 打绿色 OK 谎报全部最新。
+        let (code, out) = match run_capture_status("npm", &["outdated", "-g", "--json"], 45) {
+            Ok(v) => v,
             Err(e) => {
                 log("err", tr!("npm.checkFailed", e));
                 return vec![];
             }
         };
+        if code != 0 {
+            let detail = out.trim().lines().next().unwrap_or("").to_string();
+            log(
+                "err",
+                tr!("npm.checkFailed", if detail.is_empty() { code.to_string() } else { detail }),
+            );
+            return vec![];
+        }
 
         let json_part = match extract_json_object(&out) {
             Some(s) => s,

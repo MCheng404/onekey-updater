@@ -122,12 +122,28 @@ body {
   cursor: default;
 }
 
-/* 减弱动画模式 */
+/* 减弱动画模式
+ *
+ * 两条并存、语义不同：
+ *   - 上面的 body.reduce-motion 是**应用内**开关（设置面板可单独关闭）
+ *   - 下面的 @media 跟随**系统**的"减少动态效果"（Windows 设置 → 辅助功能）
+ *     此前系统级开关对本应用完全无效：所有无限动画（dotPulse / emptyPulse /
+ *     logoPulse）照常全速运行，用户只能自己进设置面板才知道有这回事。
+ */
 body.reduce-motion *,
 body.reduce-motion *::before,
 body.reduce-motion *::after {
   animation: none !important;
   transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* ============ 动画 ============ */
@@ -1786,10 +1802,6 @@ html[data-text-render='none'] .toast-time {
 [data-theme='light'] .about-scroll:hover::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.25);
   background-clip: padding-box;
-}
-[data-theme='light'] .badge {
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--text-dim);
 }
 /* 深色模式下 .toast-main 本来就没有底色（见上方注释：渐变违背纯平要求）。
    浅色这里原本补了个 90° 白色渐变蒙层，属于同一类"渐变" —— 改成纯平的一层薄白。 */

@@ -44,9 +44,22 @@ fn base_command(program: &str, args: &[&str]) -> Command {
     cmd
 }
 
-/// 同步执行并捕获 stdout，默认 30 秒超时
-pub fn run_capture(program: &str, args: &[&str]) -> Result<String, String> {
-    run_capture_with_timeout(program, args, 30)
+/// 同上，但**把退出码一并带回**：返回 `(退出码, 输出)`。
+///
+/// 为什么需要它：原 `run_capture*` 只看 stdout，退出码彻底丢失。
+/// 于是在三个更新源里，"命令跑起来了但失败了"（registry 离线、依赖树损坏、
+/// winget 源不可用）与"确实没有可更新项"变成同一件事 ——
+/// 解析不出 JSON → 返回空列表 → 打一条**绿色 OK** 的"全部是最新版本"。
+/// 那个"命令失败"的分支只在 spawn 失败/超时时才走得到。
+///
+/// 退出码非 0 时 stdout 往往是要害信息，所以两种情况都把输出带回去。
+pub fn run_capture_status(
+    program: &str,
+    args: &[&str],
+    timeout_secs: u64,
+) -> Result<(i32, String), String> {
+    let out = run_capture_raw(program, args, timeout_secs)?;
+    Ok((out.0, out.1))
 }
 
 /// 带超时的同步执行并捕获 stdout
@@ -55,14 +68,23 @@ pub fn run_capture_with_timeout(
     args: &[&str],
     timeout_secs: u64,
 ) -> Result<String, String> {
+    run_capture_raw(program, args, timeout_secs).map(|(_, text)| text)
+}
+
+/// `run_capture_status` 的实现：返回 `(退出码, 输出文本)`。
+fn run_capture_raw(
+    program: &str,
+    args: &[&str],
+    timeout_secs: u64,
+) -> Result<(i32, String), String> {
     let program_owned = program.to_string();
     let args_owned: Vec<String> = args.iter().map(|s| s.to_string()).collect();
 
-    let (tx, rx) = mpsc::channel::<Result<String, String>>();
+    let (tx, rx) = mpsc::channel::<Result<(i32, String), String>>();
 
     std::thread::spawn(move || {
         let args_ref: Vec<&str> = args_owned.iter().map(|s| s.as_str()).collect();
-        let result = (|| -> Result<String, String> {
+        let result = (|| -> Result<(i32, String), String> {
             let out = base_command(&program_owned, &args_ref)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -73,7 +95,8 @@ pub fn run_capture_with_timeout(
             if text.trim().is_empty() {
                 text = decode(&out.stderr);
             }
-            Ok(text)
+            // 退出码必须回传：调用方要靠它区分"没有可更新项"与"检查失败"
+            Ok((out.status.code().unwrap_or(-1), text))
         })();
         let _ = tx.send(result);
     });
@@ -155,6 +178,20 @@ pub fn run_stream_with_timeout<F: FnMut(&str)>(
 
     // 接收输出 + 等待子进程，带总超时
     loop {
+        // 总超时检查必须在循环最外层，且与"有没有新输出"无关。
+        //
+        // 原来它只写在 `RecvTimeoutError::Timeout` 分支里，也就是"连续 250ms 没有
+        // 新输出"才检查。而 npm install / pip install / winget upgrade 这些恰恰
+        // 是边干活边刷进度的 —— recv_timeout 一直返回 Ok，deadline 永远轮不到
+        // 被检查，120 秒总超时形同虚设。调用方 start_update 又是串行 await
+        // 每项更新，于是任何"卡住但仍在输出"的子进程都会让整个更新永久挂死，
+        // 前端连超时错误都收不到。
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(tr!("util.timeout", program, timeout_secs));
+        }
+
         match rx.recv_timeout(poll_interval) {
             Ok(raw) => {
                 let line = decode(&raw);
@@ -174,13 +211,7 @@ pub fn run_stream_with_timeout<F: FnMut(&str)>(
                         return Ok(status.code().unwrap_or(-1));
                     }
                     Ok(None) => {
-                        // 子进程仍在运行，检查总超时
-                        if std::time::Instant::now() > deadline {
-                            let _ = child.kill();
-                            let _ = child.wait();
-                            return Err(tr!("util.timeout", program, timeout_secs));
-                        }
-                        // 继续循环
+                        // 子进程仍在运行，继续循环（超时由上面的外层检查负责）
                     }
                     Err(e) => return Err(tr!("util.waitFailed", program, e)),
                 }
@@ -451,5 +482,57 @@ pub fn node_satisfies_openclaw(v: &str) -> bool {
         26 => minor >= 1,
         m if m >= 27 => true,
         _ => false, // <24 与 25.x 都不满足
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 回归测试：退出码必须能被调用方拿到。
+    ///
+    /// 修复前 `run_capture*` 只回传 stdout，退出码彻底丢失，于是三个更新源
+    /// 无法区分"没有可更新项"与"检查失败"——后者会解析不出 JSON、打绿色 OK
+    /// 谎报"全部是最新版本"。这个用例锁死"非 0 退出码不再被吞掉"。
+    #[test]
+    fn capture_status_reports_nonzero_exit() {
+        // Windows 上用 cmd 制造一个确定的失败退出码
+        let (code, text) = run_capture_status("cmd", &["/C", "exit 3"], 15)
+            .expect("cmd 应该能执行");
+        assert_eq!(code, 3, "非 0 退出码必须原样回传，而不是被丢弃");
+        // 失败时 stdout 为空，应回退到 stderr 或空串，但不能 panic
+        let _ = text;
+    }
+
+    #[test]
+    fn capture_status_reports_zero_exit() {
+        let (code, text) = run_capture_status("cmd", &["/C", "echo", "hello"], 15)
+            .expect("cmd 应该能执行");
+        assert_eq!(code, 0, "成功时退出码应为 0");
+        assert!(
+            text.contains("hello"),
+            "成功时 stdout 必须被捕获到，实际: {:?}",
+            text
+        );
+    }
+
+    /// OpenClaw 的 Node 版本要求：>=24.16 <25 || >=26.1（25.x 明确排除）
+    #[test]
+    fn node_requirement_matches_openclaw_guard() {
+        for (v, ok) in [
+            ("22.22.2", false),
+            ("24.15.9", false),
+            ("24.16.0", true),
+            ("25.0.0", false), // 要求里明确排除 25.x
+            ("25.9.9", false),
+            ("26.0.0", false), // 26 要 >= 26.1
+            ("26.1.0", true),
+            ("26.4.0", true),
+            ("27.0.0", true),
+            ("", false),
+            ("not-a-version", false),
+        ] {
+            assert_eq!(node_satisfies_openclaw(v), ok, "版本 {} 判定错误", v);
+        }
     }
 }

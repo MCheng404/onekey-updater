@@ -599,7 +599,11 @@ function patchIcons(icons: Record<string, string>): void {
 
 /* ============ 勾选同步 ============ */
 function syncGroupCheckbox(source: SourceKind) {
-  const group = items.filter((i) => i.source === source);
+  // ⚠️ 必须用 visibleItems()，与 buildGroup 保持同一口径。
+  // 之前这里用全量 items（含被忽略项）：于是某源可见项全被勾选时，
+  // 因为分母里混着被忽略的项，sel 永远追不上 group.length，
+  // 分组头会错误地变成 indeterminate、"整组选中"的光晕也点不亮。
+  const group = visibleItems().filter((i) => i.source === source);
   const cb = document.querySelector<HTMLInputElement>(
     `input[data-role="group"][data-source="${source}"]`
   );
@@ -647,7 +651,8 @@ function bindListEvents(): void {
     if (target.dataset.role === 'group') {
       const source = target.dataset.source as SourceKind | undefined;
       if (!source) return;
-      const group = items.filter((i) => i.source === source);
+      // 同上：只作用于可见项，不能把被忽略的项塞进 checked
+      const group = visibleItems().filter((i) => i.source === source);
       if (target.checked) group.forEach((i) => checked.add(i.id));
       else group.forEach((i) => checked.delete(i.id));
       popCheckbox(target);
@@ -1122,7 +1127,9 @@ async function autostartCheck() {
       }
       void invoke('send_notification', {
         title: t('notify.foundTitle'),
-        body: t('notify.foundBody', { count: items.length }),
+        // 数量也必须用可见项：刚才的判断已经认定"被忽略的项不算数"，
+        // 若这里退回全量 items.length，会出现"弹窗说 5 项、点进去只有 2 项"。
+        body: t('notify.foundBody', { count: visibleItems().length }),
         level: 'info',
       }).catch(() => undefined);
     } else {

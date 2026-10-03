@@ -344,6 +344,10 @@ function applyI18nTexts(): void {
     syncTextRender();
     syncMaterial();
     renderIgnoreList();
+    // ⚠️ 必须重建字体控件：#fontFilePath 上带了 data-i18n，applyI18n() 会把它的
+    // 文本无条件写回"未选择字体文件"的占位文案。少了这一句，用户选好自定义字体
+    // 后一切换语言，路径就凭空消失（而字体其实仍在生效）。
+    syncFontControls();
   } catch {
     /* ignore */
   }

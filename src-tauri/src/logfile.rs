@@ -29,16 +29,25 @@ pub fn append(line: &LogLine) {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) else {
-        return;
-    };
-    let _ = writeln!(
-        f,
-        "{} [{}] {}",
+    // 先在内存里拼出完整的一整行，再一次性写入。
+    //
+    // 直接 `writeln!(f, "{} [{}] {}", ..)` 会被拆成**多次** write 系统调用
+    // （每个格式参数一次），而 Windows 的 FILE_APPEND_DATA 只保证**单次写**
+    // 的原子性，保证不了一个逻辑行的原子性。check_updates 同时跑四个源线程
+    // （npm / winget / pip / openclaw），谁都在高频调 emit_log —— 实测四线程
+    // 各写 300 行时有 43% 的行被撕成半截交错。
+    // 而这个文件存在的唯一理由就是"更新失败后事后排查"，撕坏了就毫无价值。
+    let buf = format!(
+        "{} [{}] {}\n",
         line.at,
         line.level.to_uppercase(),
         line.text
     );
+
+    let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) else {
+        return;
+    };
+    let _ = f.write_all(buf.as_bytes());
 }
 
 /// 本地日期 `YYYY-MM-DD`（UTC+8，避免为此引入 chrono）

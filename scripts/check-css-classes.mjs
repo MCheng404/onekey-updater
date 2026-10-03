@@ -11,14 +11,34 @@ import { readFileSync } from 'node:fs';
 const css = readFileSync('src/styles.css', 'utf8');
 
 // ---- 1. 收集 CSS 里出现的类选择器 ----
-// 只看每条规则的选择器部分（`{` 之前），跳过声明块与 @ 规则名。
+// ⚠️ 必须能进入 @media / @supports 等 at-rule 的花括号内部。
+// 原实现用 `(^|})\s*([^{}@]+)\{`，依赖 `}` 或字符串起始来定位选择器，
+// 且用 `[^{}@]+` 排除了 `@` —— 于是 `@media … {` 之后的第一条规则
+// （前面既不是 `}` 也不是 `^`）整块被漏掉。实测合成用例
+// `{.a}{ @media{ .b{} } .c{} }` 只能收到 [a, c]，
+// 而检查器退出码仍为 0 —— 也就是**该区域对检查器永久失明**。
 const cssClasses = new Set();
 const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
-for (const m of withoutComments.matchAll(/(^|})\s*([^{}@]+)\{/g)) {
-  const selector = m[2];
-  for (const c of selector.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) {
-    cssClasses.add(c[1]);
+
+function collectSelectors(text) {
+  for (const m of text.matchAll(/(^|[{}])\s*([^{}@]+?)\s*(?=\{)/g)) {
+    const selector = m[2];
+    // 跳过 at-rule 名（@media、@supports…）本身，它们不是选择器
+    if (selector.startsWith('@')) continue;
+    for (const c of selector.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) {
+      cssClasses.add(c[1]);
+    }
   }
+}
+
+collectSelectors(withoutComments);
+// 递归剥掉 at-rule 的外层花括号，把内部内容再送进同一个收集器
+let inner = withoutComments;
+for (let i = 0; i < 12; i++) {
+  const next = inner.replace(/@(?:media|supports|container|layer)[^{]*\{([^{}]*\{[^{}]*\}[^{}]*)\}/g, '$1');
+  if (next === inner) break;
+  collectSelectors(next);
+  inner = next;
 }
 
 // ---- 2. 收集 HTML / TS 里真正用到的类名 ----

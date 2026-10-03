@@ -78,58 +78,81 @@ impl UpdateSource for OpenclawSource {
         let tag = item.tag.clone().unwrap_or_else(|| "latest".to_string());
         log("info", tr!("openclaw.updating", tag));
 
-        // 1. 停止 gateway
-        log("info", tr!("openclaw.stopping"));
-        let _ = run_stream("openclaw", &["gateway", "stop"], |line| {
-            log("cmd", line.to_string());
-        });
-
-        // 2. 安装
+        // 非管理员时装到用户目录下的专用前缀。
+        //
+        // 这里刻意**不用** `npm config set prefix`：那是永久改写用户 .npmrc 的
+        // 全局配置，一旦装失败也不回滚 —— 用户此后所有全局 npm 安装都会被搬到
+        // 那个目录，而它未必在 PATH 上，于是全局命令"集体消失"（真实发生过）。
+        // 也**不用** `std::env::set_var` 改 PATH：多线程程序里它是不安全的
+        // （Rust 文档明确标注），而且只对本进程有效、退出即失效，对用户毫无意义。
+        // 改为每次调用带 `--prefix`，并直接用绝对路径调用装出来的 openclaw。
         let admin = is_admin();
+        let mut prefix: Option<String> = None;
         if admin {
             log("info", tr!("openclaw.adminInstall"));
         } else {
             log("warn", tr!("openclaw.userInstall"));
             let home = std::env::var("USERPROFILE").unwrap_or_default();
-            let prefix = format!("{}\\.local", home);
-            let _ = run_capture_with_timeout("npm", &["config", "set", "prefix", &prefix], 15);
-            let old_path = std::env::var("PATH").unwrap_or_default();
-            std::env::set_var("PATH", format!("{}\\bin;{}", prefix, old_path));
+            if !home.is_empty() {
+                let p = format!("{}\\.openclaw-updater", home);
+                if std::fs::create_dir_all(&p).is_ok() {
+                    prefix = Some(p);
+                }
+            }
         }
 
+        // Windows 上 npm 把全局可执行文件**直接放在 {prefix} 下**，
+        // 不是 {prefix}\bin（那是 Unix 布局）—— 拼错这个子目录，
+        // 装完的新 openclaw 根本不在我们以为的位置。
+        let cli = match prefix.as_deref() {
+            Some(p) => format!("{}\\openclaw.cmd", p),
+            None => "openclaw".to_string(),
+        };
+
+        // 1. 停止 gateway。必须带 --force：不带的话 CLI 会拒绝停掉正在运行的
+        //    gateway，旧进程继续占着端口，新装完的也起不来。
+        log("info", tr!("openclaw.stopping"));
+        if run_stream(&cli, &["gateway", "stop", "--force"], |line| {
+            log("cmd", line.to_string());
+        })
+        .map(|c| c != 0)
+        .unwrap_or(true)
+        {
+            log("warn", tr!("openclaw.stopFailed"));
+        }
+
+        // 2. 安装
         let pkg_spec = format!("openclaw@{}", tag);
         // ⚠️ 必须显式放行安装脚本。新版 npm 默认拦截 install scripts，而 openclaw 的
         // postinstall（装 bundled plugins）与几个原生依赖（koffi / tree-sitter-bash）
         // 全靠它 —— 不放行的话包"装上了"但不完整，gateway 也起不来。
-        // 这份清单就是 npm 自己在警告里给出的那串。
-        let code = run_stream(
-            "npm",
-            &[
-                "i",
-                "-g",
-                &pkg_spec,
-                "--allow-scripts=openclaw,@google/genai,koffi,tree-sitter-bash,protobufjs",
-            ],
-            |line| {
-                log("cmd", line.to_string());
-            },
-        );
+        let mut argv: Vec<String> = vec![
+            "i".to_string(),
+            "-g".to_string(),
+            pkg_spec,
+            "--allow-scripts=openclaw,@google/genai,koffi,tree-sitter-bash,protobufjs".to_string(),
+        ];
+        if let Some(p) = prefix.as_deref() {
+            argv.push("--prefix".to_string());
+            argv.push(p.to_string());
+        }
+        let argv_ref: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
+        let code = run_stream("npm", &argv_ref, |line| {
+            log("cmd", line.to_string());
+        });
 
         match code {
             Ok(0) => {
                 log("info", tr!("openclaw.reinstall"));
-                // 网关这两步都要看返回值：原来用 `let _ =` 丢掉结果，然后无条件报
-                // "更新完成" —— 日志一片 OK，实际上 gateway 是挂的，用户完全被骗。
-                // 另外 stop/restart 都要带 --force，否则它会拒绝停掉正在运行的 gateway，
-                // 旧进程继续占着端口，新的就起不来。
-                let install_ok = run_stream("openclaw", &["gateway", "install", "--force"], |line| {
+                // 网关这两步的退出码必须参与最终结果判定。
+                let install_ok = run_stream(&cli, &["gateway", "install", "--force"], |line| {
                     log("cmd", line.to_string());
                 })
                 .map(|c| c == 0)
                 .unwrap_or(false);
 
                 log("info", tr!("openclaw.restarting"));
-                let restart_ok = run_stream("openclaw", &["gateway", "restart", "--force"], |line| {
+                let restart_ok = run_stream(&cli, &["gateway", "restart", "--force"], |line| {
                     log("cmd", line.to_string());
                 })
                 .map(|c| c == 0)
@@ -137,14 +160,24 @@ impl UpdateSource for OpenclawSource {
 
                 if install_ok && restart_ok {
                     log("ok", tr!("openclaw.done", tag));
+                    true
                 } else {
+                    // 网关没起来就不能算成功：前端会把 ok=true 的项移出列表、
+                    // 计入"全部成功"，用户就彻底看不到"装上了但没跑起来"。
+                    // 这比返回 false 更糟 —— 假成功会让人以为一切正常。
                     log("warn", tr!("openclaw.gatewayFailed", tag));
+                    false
                 }
-                true
             }
             _ => {
                 log("err", tr!("openclaw.failed"));
-                log("warn", tr!("openclaw.adminHint"));
+                // 已经是管理员了还失败，就别再提示"请以管理员身份运行" ——
+                // 那会把用户引向 UAC，真正的原因多半是 Node 版本不满足。
+                if admin {
+                    log("warn", tr!("openclaw.nodeHint"));
+                } else {
+                    log("warn", tr!("openclaw.adminHint"));
+                }
                 false
             }
         }

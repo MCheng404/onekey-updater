@@ -1,7 +1,7 @@
 use crate::model::{Source, UpdateItem};
 use crate::tr;
 use crate::sources::{LogFn, UpdateSource};
-use crate::util::{cmd_exists, extract_json_array, run_capture_with_timeout, run_stream};
+use crate::util::{cmd_exists, extract_json_array, run_capture_status, run_stream};
 
 pub struct PipSource;
 
@@ -18,17 +18,28 @@ impl UpdateSource for PipSource {
         log("info", tr!("pip.checking"));
 
         // --disable-pip-version-check：省掉"检查 pip 自身是否有新版"的那次网络往返
-        let out = match run_capture_with_timeout(
+        // 退出码必须参与判定：pip 在网络中断 / Python 环境异常时以非 0 退出
+        // 且 stdout 不是合法 JSON。只看 stdout 会把"检查失败"当成
+        // "没有可更新项"，打绿色 OK 谎报全部最新。
+        let (code, out) = match run_capture_status(
             "pip",
             &["list", "--outdated", "--format=json", "--disable-pip-version-check"],
             45,
         ) {
-            Ok(o) => o,
+            Ok(v) => v,
             Err(e) => {
                 log("err", tr!("pip.checkFailed", e));
                 return vec![];
             }
         };
+        if code != 0 {
+            let detail = out.trim().lines().next().unwrap_or("").to_string();
+            log(
+                "err",
+                tr!("pip.checkFailed", if detail.is_empty() { code.to_string() } else { detail }),
+            );
+            return vec![];
+        }
 
         let arr = match extract_json_array(&out) {
             Some(s) => s,

@@ -1,7 +1,7 @@
 use crate::model::{Source, UpdateItem};
 use crate::tr;
 use crate::sources::{LogFn, UpdateSource};
-use crate::util::{cmd_exists, extract_json_array, run_capture, run_stream};
+use crate::util::{cmd_exists, extract_json_array, run_capture_status, run_stream};
 
 pub struct WingetSource;
 
@@ -19,20 +19,36 @@ impl UpdateSource for WingetSource {
 
         // winget 1.30 的 upgrade 子命令不支持 --output json，
         // 传了只会输出帮助文本。这里只传通用参数，解析走表格。
-        let out = match run_capture(
+        // 两处修正：
+        // 1) 超时从 30 秒放宽到 120 秒。winget upgrade 要联网查 winget 源 +
+        //    msstore 源并下载清单，实测普遍超过 30 秒 —— 而另外三个源都显式给了
+        //    45 秒，唯独最慢的 winget 用了 `run_capture` 的 30 秒默认值。
+        // 2) 退出码必须参与判定：源不可用 / 源协议未接受时 winget 非 0 退出，
+        //    stdout 不是合法表格；原先只看 stdout，会走"解析不出内容 → 全部最新"
+        //    的分支，打绿色 OK 谎报"全部是最新版本"。
+        let (code, out) = match run_capture_status(
             "winget",
             &[
                 "upgrade",
                 "--accept-source-agreements",
                 "--disable-interactivity",
             ],
+            120,
         ) {
-            Ok(o) => o,
+            Ok(v) => v,
             Err(e) => {
                 log("err", tr!("winget.checkFailed", e));
                 return vec![];
             }
         };
+        if code != 0 {
+            let detail = out.trim().lines().next().unwrap_or("").to_string();
+            log(
+                "err",
+                tr!("winget.checkFailed", if detail.is_empty() { code.to_string() } else { detail }),
+            );
+            return vec![];
+        }
 
         // 优先走 JSON（未来版本若支持则更精确）
         if let Some(items) = try_json(&out) {

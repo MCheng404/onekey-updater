@@ -148,18 +148,34 @@ jobs:
 
       - name: Generate SHA256SUMS
         run: |
-          $items = @(
-            (Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe),
-            (Get-ChildItem src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe),
-            "src-tauri/target/release/onekey-updater-x64.exe",
-            "src-tauri/target/aarch64-pc-windows-msvc/release/onekey-updater-arm64.exe"
-          )
+          # ⚠️ 必须用 `+=` 逐个追加，不能写成
+          #    @((Get-ChildItem a), (Get-ChildItem b), "x", "y")。
+          # PowerShell 会把两个 Get-ChildItem 结果保留成**嵌套数组**，
+          # foreach 拿到的 $f 是 Object[]，`$f -is [string]` 为 false，
+          # 于是走 else 分支的 `$f.FullName` —— 把该目录下**所有**路径
+          # 拼成单个字符串。实测两个安装包的校验行会输出成 `System.Object[]`，
+          # 而便携包两行正常，文件"看起来有内容"却无法用 sha256sum -c 校验。
+          $items = @()
+          $items += Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe
+          $items += Get-ChildItem src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
+          $items += 'src-tauri/target/release/onekey-updater-x64.exe'
+          $items += 'src-tauri/target/aarch64-pc-windows-msvc/release/onekey-updater-arm64.exe'
+
+          $lines = @()
           foreach ($f in $items) {
             $p = if ($f -is [string]) { $f } else { $f.FullName }
             if (Test-Path $p) {
               $h = (Get-FileHash $p -Algorithm SHA256).Hash.ToLower()
-              "{0}  {1}" -f $h, [IO.Path]::GetFileName($p) | Add-Content SHA256SUMS.txt
+              $lines += ('{0}  {1}' -f $h, [IO.Path]::GetFileName($p))
             }
+          }
+          $lines | Set-Content SHA256SUMS.txt
+
+          # 断言：每一行都必须匹配 64 位十六进制 + 文件名，
+          # 且总行数必须等于预期产物数（2 个安装包 + 2 个便携包）。
+          if ($lines.Count -ne 4) { throw "期望 4 条校验和，实际 $($lines.Count) 条" }
+          foreach ($l in $lines) {
+            if ($l -notmatch '^[0-9a-f]{64}\s{2}\S+$') { throw "校验和格式非法: $l" }
           }
           Get-Content SHA256SUMS.txt
 

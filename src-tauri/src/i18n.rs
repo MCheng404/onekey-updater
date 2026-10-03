@@ -237,6 +237,16 @@ static TABLE: &[(&str, &str, &str)] = &[
         "{} 已安装，但 gateway 未能重启（端口可能被占用），请手动执行 openclaw gateway install --force",
         "{} installed, but the gateway did not restart (the port may be in use). Run openclaw gateway install --force manually.",
     ),
+    (
+        "openclaw.stopFailed",
+        "未能停止正在运行的 gateway（将继续安装，但新版本可能无法接管端口）",
+        "Could not stop the running gateway (installing continues, but the new version may not take over the port)",
+    ),
+    (
+        "openclaw.nodeHint",
+        "已以管理员身份运行仍失败：请检查 Node 版本是否满足 OpenClaw 要求（>=24.16 <25 或 >=26.1）",
+        "Failed even as administrator: check whether the Node version meets OpenClaw's requirement (>=24.16 <25 or >=26.1)",
+    ),
     ("openclaw.failed", "OpenClaw 更新失败", "OpenClaw update failed"),
     (
         "openclaw.adminHint",
