@@ -15,7 +15,9 @@ import { applyI18n as applyI18nShared, t, getLang, watchLang } from './i18n';
 // GitHub 配置
 const GITHUB_PROFILE = 'https://github.com/MCheng404';
 const GITHUB_REPO = 'https://github.com/MCheng404/onekey-updater';
-const REPO_API = 'https://api.github.com/repos/MCheng404/onekey-updater/releases/latest';
+/** GitHub Releases 列表（需要多条才能筛出桌面版，故用列表接口而非 /latest） */
+const REPO_API =
+  'https://api.github.com/repos/MCheng404/onekey-updater/releases?per_page=20';
 
 let win: ReturnType<typeof getCurrentWindow> | null = null;
 
@@ -29,6 +31,59 @@ function el<T extends HTMLElement = HTMLElement>(id: string): T {
 function applyI18n(): void {
   document.title = t('about.title');
   applyI18nShared();
+}
+
+/**
+ * 从 releases 列表里挑出**版本号最大的桌面版**。
+ *
+ * 为什么必须筛：本仓库同时发布 Android 版，tag 形如 `app-v3.1.4`，
+ * 且全部标记为 `prerelease=false / draft=false` ——
+ * 所以 `GET /releases/latest` 必定返回 **Android 版**。
+ * 原实现只做 `.replace(/^v/, '')`，"app-v3.1.4" 剥不掉前缀，
+ * 与本地版本一比永远不等，于是"关于"窗口永远提示有新版。
+ *
+ * 桌面版 tag 规则：`v<semver>`（v2.3.0 / v2.2.2 …）。
+ * 这里按该形状过滤，再按 semver 取最大值，不依赖 API 返回顺序。
+ */
+function pickLatestDesktopRelease(releases: unknown): {
+  tag: string;
+  version: string;
+  url?: string;
+} | null {
+  if (!Array.isArray(releases)) return null;
+
+  let best: { tag: string; version: string; url?: string } | null = null;
+  let bestKey: number[] = [0, 0, 0];
+
+  for (const r of releases) {
+    if (!r || typeof r !== 'object') continue;
+    const rel = r as {
+      tag_name?: unknown;
+      html_url?: unknown;
+      draft?: unknown;
+      prerelease?: unknown;
+    };
+    if (rel.draft === true || rel.prerelease === true) continue;
+    const tag = typeof rel.tag_name === 'string' ? rel.tag_name.trim() : '';
+    const m = /^v(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?$/.exec(tag);
+    if (!m) continue; // app-v3.1.4 等非桌面版在此被排除
+
+    const key = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const isNewer =
+      key[0] > bestKey[0] ||
+      (key[0] === bestKey[0] && key[1] > bestKey[1]) ||
+      (key[0] === bestKey[0] && key[1] === bestKey[1] && key[2] > bestKey[2]);
+
+    if (!best || isNewer) {
+      best = {
+        tag,
+        version: `${m[1]}.${m[2]}.${m[3]}`,
+        url: typeof rel.html_url === 'string' ? rel.html_url : undefined,
+      };
+      bestKey = key;
+    }
+  }
+  return best;
 }
 
 /** 检查 GitHub 最新版本 */
@@ -47,29 +102,33 @@ async function checkUpdate(): Promise<void> {
   const timer = window.setTimeout(() => controller.abort(), 8000);
 
   try {
-    let data: { tag_name?: string; html_url?: string };
+    let releases: unknown;
     try {
       const res = await fetch(REPO_API, {
         headers: { Accept: 'application/vnd.github.v3+json' },
         signal: controller.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      data = await res.json();
+      releases = await res.json();
     } finally {
       window.clearTimeout(timer);
     }
 
-    const latest = (data.tag_name ?? '').replace(/^v/, '');
+    const latest = pickLatestDesktopRelease(releases);
     const current = await getVersion();
 
     // 用 DOM 构建而非 innerHTML，避免把远端返回的字符串当 HTML 解析
     status.replaceChildren();
-    if (latest && latest !== current) {
+    if (!latest) {
+      // 列表里一个桌面版都没有：不能报"已是最新"，那是错误结论
+      status.textContent = t('common.error');
+      status.className = 'about-update-status';
+    } else if (latest.version !== current) {
       const line = document.createElement('span');
       line.append(`${t('about.newVersion')}: `);
       const ver = document.createElement('span');
       ver.className = 'mono';
-      ver.textContent = `v${latest}`;
+      ver.textContent = `v${latest.version}`;
       line.append(ver);
       status.append(line);
       status.className = 'about-update-status new';
@@ -80,7 +139,7 @@ async function checkUpdate(): Promise<void> {
       downloadBtn.style.marginLeft = '8px';
       downloadBtn.textContent = t('about.download');
       downloadBtn.addEventListener('click', () => {
-        void open(data.html_url ?? GITHUB_REPO);
+        void open(latest.url ?? GITHUB_REPO);
       });
       status.append(downloadBtn);
     } else {
