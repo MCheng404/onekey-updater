@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 二次元插画图标：背景为纯色层，前景为 AI 生成的扁平插画。
+     刻意**不声明 monochrome**：系统的主题图标功能会优先使用 monochrome 层，
+     那样就会把插画替换成抽象的单色图形，用户根本看不到这张图。
+     插画已缩放到画布的 62% 居中，位于自适应图标可见区域（中央 72/108）之内，
+     任何形状的启动器遮罩都裁不到主体。 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground" />
-    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+    <foreground android:drawable="@drawable/ic_launcher_art" />
 </adaptive-icon>

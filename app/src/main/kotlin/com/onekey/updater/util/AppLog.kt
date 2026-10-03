@@ -1,8 +1,8 @@
 package com.onekey.updater.util
 
-import java.text.SimpleDateFormat
 import java.util.ArrayDeque
-import java.util.Date
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
@@ -20,10 +20,25 @@ object AppLog {
 
     private val buffer = ArrayDeque<String>(CAPACITY)
 
-    private val formatter = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
+    /**
+     * 时间戳。
+     *
+     * 这里原本是一个共享的 `SimpleDateFormat`，同时有两个问题：
+     *  1. **它不是线程安全的**，而 `log()` 会被 MCP 工作线程、IO 线程、APKMirror 的解析线程
+     *     并发调用；`synchronized` 只保护了 buffer，格式化发生在锁外 → 数据竞争，
+     *     可能输出错乱的时间戳。
+     *  2. Locale 在构造时被固化，用户改了系统语言后日志时间仍按旧语言渲染。
+     *
+     * `DateTimeFormatter` 不可变且线程安全，并且可以每次按当前默认 Locale 取值；
+     * minSdk 26 已有 `java.time`，无需 desugaring。
+     */
+    private fun stamp(): String =
+        DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
+            .withLocale(Locale.getDefault())
+            .format(LocalTime.now())
 
     fun log(tag: String, message: String) {
-        val line = formatter.format(Date()) + " [" + tag + "] " + message
+        val line = stamp() + " [" + tag + "] " + message
         synchronized(buffer) {
             if (buffer.size >= CAPACITY) buffer.removeFirst()
             buffer.addLast(line)

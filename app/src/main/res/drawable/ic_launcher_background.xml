@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 纯白底。此前用 #1A1A1A，启动器遮罩为圆形/圆角矩形时，
-     深色底会在图形四周露出一圈，看起来就是「黑边」。白色底不会产生这个问题。 -->
+<!-- 自适应图标的背景层：纯色 #BBF5FF。
+     这个色值取自 AI 生成插画的**边缘众数**（不是左上角那一个像素，
+     角点是 #C1F3FE，比周围偏亮，直接拿来铺底会在图标四周露出色差）。
+     纯色而非渐变：深色底在启动器圆形/圆角遮罩下会显出"黑边"，浅色纯色不会。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#FFFFFF" android:pathData="M0,0h108v108h-108z" />
+    <path android:fillColor="#BBF5FF" android:pathData="M0,0h108v108h-108z" />
 </vector>
