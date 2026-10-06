@@ -107,6 +107,19 @@ class XiaomiRepository(
 
 	private suspend fun query(chunk: List<AppInstalled>): List<AppUpdate> {
 		val response = service.checkUpdates(baseParams(chunk))
+
+		// 小米被风控/拦参时返回的是 HTTP 200 + errCode，而不是 4xx/5xx ——
+		// 不显式判断的话，这个响应会被解析成「listApp 为空」，表现与「确实没有更新」
+		// 完全一样，排查时只能靠猜。这里显式失败并把服务端原话记进日志。
+		if (response.errCode != 0) {
+			Log.w(
+				TAG,
+				"小米商店拒绝本批（${chunk.size} 个应用）：errCode=" + response.errCode +
+					" errDesc=" + response.errDesc
+			)
+			return emptyList()
+		}
+
 		val byPackage = chunk.associateBy { it.packageName }
 		Log.i(
 			TAG,

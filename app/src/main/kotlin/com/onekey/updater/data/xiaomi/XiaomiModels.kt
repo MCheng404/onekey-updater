@@ -18,6 +18,18 @@ import com.google.gson.annotations.SerializedName
  *  · 是**批量**接口（包名与版本号都逗号分隔），比应用宝的逐包查询好得多。
  */
 data class XiaomiUpdateResponse(
+    /**
+     * 业务错误码。**必须判断**，否则风控会被静默当成「没有更新」。
+     *
+     * 小米在被拦时返回的是 **HTTP 200 + 业务错误**：
+     * `{"errDesc":"接口刷量并不会影响推荐算法…","errCode":1}`。
+     * 若不判 `errCode`，这个响应会被解析成「listApp 为空」，
+     * 表现就是"扫完了但一条更新都没有"，完全看不出是被拦了。
+     * 已实测到的错误码：1 = 不支持的接口（常见于用错 HTTP 方法）、
+     * 4 = 参数不能为空（缺 model/device/os/sdk）。
+     */
+    @SerializedName("errCode") val errCode: Int = 0,
+    @SerializedName("errDesc") val errDesc: String = "",
     /** 商店里没有的应用，可用来过滤。 */
     @SerializedName("invalidPackage") val invalidPackages: List<String> = emptyList(),
     /** 支持 64 位的应用。 */
