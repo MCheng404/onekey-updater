@@ -22,8 +22,6 @@
 
     <!-- 设置 -->
     <string name="root_install_not_supported">不支持用Root安装这个app</string>
-    <string name="settings_portrait_columns">竖屏列数</string>
-    <string name="settings_landscape_columns">横屏列数</string>
     <string name="play_text_animations">播放文字动画</string>
     <string name="settings_sources">来源</string>
     <string name="settings_ui">用户界面</string>

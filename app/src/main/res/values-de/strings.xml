@@ -23,8 +23,6 @@
     <string name="root_install_not_supported">Root-Installation dieser App wird nicht unterstützt.</string>
 
     // Settings
-    <string name="settings_portrait_columns">Anzahl der Spalten</string>
-    <string name="settings_landscape_columns">Anzahl der Zeilen</string>
     <string name="play_text_animations">Textanimation verwenden</string>
     <string name="settings_sources">Quellen</string>
     <string name="settings_ui">Benutzeroberfläche</string>

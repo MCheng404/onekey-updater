@@ -18,8 +18,6 @@
     <string name="app_cd">Iconița Aplicației</string>
 
     // Settings
-    <string name="settings_portrait_columns">Coloane Portret</string>
-    <string name="settings_landscape_columns">Coloane Peisaj</string>
     <string name="settings_sources">Surse</string>
     <string name="settings_ui">UI</string>
     <string name="settings_alarm">Alarmă</string>

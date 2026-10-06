@@ -24,8 +24,6 @@
 
     // Settings
     <string name="settings_experimental_installer">Экспериментальный установщик</string>
-    <string name="settings_portrait_columns">Колонок (портрет)</string>
-    <string name="settings_landscape_columns">Колонок (альбом)</string>
     <string name="play_text_animations">Анимации текста</string>
     <string name="settings_sources">Источники</string>
     <string name="settings_ui">Интерфейс</string>

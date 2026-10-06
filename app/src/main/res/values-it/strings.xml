@@ -21,8 +21,6 @@
     <string name="install_failure">%1$s installazioni fallite.</string>
 
     // Settings
-    <string name="settings_portrait_columns">Colonne verticali</string>
-    <string name="settings_landscape_columns">Colonne orizzontali</string>
     <string name="settings_sources">Fonti</string>
     <string name="settings_ui">Interfaccia grafica</string>
     <string name="settings_alarm">Notifiche</string>

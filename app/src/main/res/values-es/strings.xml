@@ -21,8 +21,6 @@
     <string name="install_failure">%1$s fallo en la instalación.</string>
 
     // Settings
-    <string name="settings_portrait_columns">Columnas en modo Retrato</string>
-    <string name="settings_landscape_columns">Columnas en modo Apaisado</string>
     <string name="settings_sources">Fuentes</string>
     <string name="settings_ui">Interfaz de Usuario</string>
     <string name="settings_alarm">Alarma</string>

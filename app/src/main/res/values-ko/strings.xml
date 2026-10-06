@@ -21,8 +21,6 @@
     <string name="install_failure">%1$s 설치 실패됨.</string>
 
     // Settings
-    <string name="settings_portrait_columns">세로 열</string>
-    <string name="settings_landscape_columns">가로 열</string>
     <string name="play_text_animations">텍스트 애니메이션 재생</string>
     <string name="settings_sources">출처</string>
     <string name="settings_ui">UI</string>

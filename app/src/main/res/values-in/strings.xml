@@ -22,8 +22,6 @@
     <string name="root_install_not_supported">Pemasangan root pada aplikasi ini tidak didukung.</string>
 
     // Settings
-    <string name="settings_portrait_columns">Kolom Potret</string>
-    <string name="settings_landscape_columns">Kolom Landscape</string>
     <string name="play_text_animations">Putar Animasi Teks</string>
     <string name="settings_sources">Sumber</string>
     <string name="settings_ui">UI</string>

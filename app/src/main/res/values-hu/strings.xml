@@ -22,8 +22,6 @@
     <string name="root_install_not_supported">Az app root telepítése nem támogatott.</string>
 
     // Settings
-    <string name="settings_portrait_columns">Álló mód oszlopok</string>
-    <string name="settings_landscape_columns">Fekvő mód oszlopok</string>
     <string name="play_text_animations">Szöveg animációk lejátszása</string>
     <string name="settings_sources">Források</string>
     <string name="settings_ui">Felület</string>

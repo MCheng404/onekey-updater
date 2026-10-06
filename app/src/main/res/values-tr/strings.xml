@@ -18,8 +18,6 @@
   <string name="app_cd">Uygulama Simgesi</string>
   <string name="install_success">%1$s yüklendi.</string>
   <string name="install_failure">%1$s yüklenemedi.</string>
-  <string name="settings_portrait_columns">Dikey Sütunlar</string>
-  <string name="settings_landscape_columns">Yatay Sütunlar</string>
   <string name="play_text_animations">Metin Animasyonlarını Oynat</string>
   <string name="settings_sources">Kaynaklar</string>
   <string name="settings_ui">UI</string>

@@ -22,8 +22,6 @@
     <string name="root_install_not_supported">இந்த செயலியை ரூட் மூலம் நிறுவு இயலாது.</string>
 
     // Settings
-    <string name="settings_portrait_columns">செங்குத்து நெடுவரிசைகள்</string>
-    <string name="settings_landscape_columns">கிடைமட்ட நெடுவரிசைகள்</string>
     <string name="play_text_animations">எழுத்து அனிமேஷன்களை இயக்கவும்</string>
     <string name="settings_sources">மூலங்கள்</string>
     <string name="settings_ui">பயனர் இடைமுகம்</string>

@@ -21,8 +21,6 @@
     <string name="install_failure">%1$s dështoi të instalohet.</string>
 
     // Settings
-    <string name="settings_portrait_columns">Kolonat në Portret</string>
-    <string name="settings_landscape_columns">Kolonat në Peizazh</string>
     <string name="settings_sources">Burimet</string>
     <string name="settings_ui">UI</string>
     <string name="settings_alarm">Alarmi</string>

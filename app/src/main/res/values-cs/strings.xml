@@ -24,8 +24,6 @@
 
     // Settings
     <string name="settings_experimental_installer">Použít exprerimentální nový instalátor</string>
-    <string name="settings_portrait_columns">Sloupce v portrétním režimu</string>
-    <string name="settings_landscape_columns">Sloupce v režimu na šířku</string>
     <string name="play_text_animations">Animace textu Play</string>
     <string name="settings_sources">Zdroje</string>
     <string name="settings_ui">UI</string>

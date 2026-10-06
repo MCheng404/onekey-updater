@@ -20,8 +20,6 @@
     <string name="install_failure">%1$s ထည့်သွင်းမှုမအောင်မြင်ပါ။</string>
 
     // Settings
-    <string name="settings_portrait_columns">အလျားလိုက်အကန့်</string>
-    <string name="settings_landscape_columns">ဒေါင်လိုက်အကန့်</string>
     <string name="settings_sources">အရင်းမြစ်များ</string>
     <string name="settings_ui">ပြသပုံ</string>
     <string name="settings_alarm">နှိုးစက်အသိပေးချက်</string>

@@ -22,8 +22,6 @@
     <string name="root_install_not_supported">تثبيت هذا التطبيق من خلال الروت غير مدعوم.</string>
 
     // Settings
-    <string name="settings_portrait_columns">أعمدة عمودية</string>
-    <string name="settings_landscape_columns">أعمدة أفقية</string>
     <string name="play_text_animations">تشغيل الرسوم المتحركة النصية</string>
     <string name="settings_sources">المصادر</string>
     <string name="settings_ui">الواجهة</string>

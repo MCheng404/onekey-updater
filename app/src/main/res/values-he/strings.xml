@@ -21,8 +21,6 @@
     <string name="install_failure">%1$s ההתקנה נכשלה.</string>
 
     // Settings
-    <string name="settings_portrait_columns">עמודות לרוחב</string>
-    <string name="settings_landscape_columns">עמודות לאורך</string>
     <string name="settings_sources">מקורות</string>
     <string name="settings_ui">ממשק משתמש</string>
     <string name="settings_alarm">התרעה</string>

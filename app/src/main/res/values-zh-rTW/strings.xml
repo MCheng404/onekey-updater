@@ -23,8 +23,6 @@
     <string name="root_install_not_supported">不支援此應用程式的 Root 安裝。</string>
 
     // Settings
-    <string name="settings_portrait_columns">直向欄數</string>
-    <string name="settings_landscape_columns">橫向欄數</string>
     <string name="play_text_animations">播放文字動畫</string>
     <string name="settings_sources">來源</string>
     <string name="settings_ui">使用者介面</string>
@@ -72,4 +70,39 @@
         <item quantity="other">找到 %1$d 個更新。</item>
     </plurals>
 
+
+    // 下列為 OneKey Updater 新增功能（設定 → MCP / 代理 / 關於 / 應用列表權限提示）
+    <string name="mcp_port">MCP 連接埠</string>
+    <string name="mcp_token">MCP 存取權杖</string>
+    <string name="mcp_adb_hint">在電腦上連線此裝置：</string>
+    <string name="mcp_token_copy">複製權杖</string>
+    <string name="mcp_token_regenerate">重新產生</string>
+    <string name="diagnostics_group_github">GitHub 線路</string>
+    <string name="diagnostics_group_fdroid">F-Droid 鏡像</string>
+    <string name="diagnostics_group_source">第三方來源</string>
+    <string name="diagnostics_usable_count">%2$s 條中 %1$s 條可用</string>
+    <string name="diagnostics_fastest">最快：%1$s · %2$d 毫秒</string>
+    <string name="diagnostics_none_usable">本組無可用線路</string>
+    <string name="diagnostics_more_hidden">另有 %1$d 條未顯示（依延遲排序，僅列出最快的）</string>
+    <string name="diagnostics_optimize">最佳化線路</string>
+    <string name="proxy_enabled">使用自訂代理</string>
+    <string name="proxy_enabled_summary">更新檢查、下載與圖示載入全部透過此代理。在 HTTP 層統一生效，所有更新來源都會遵循。</string>
+    <string name="proxy_type">代理類型</string>
+    <string name="proxy_type_summary">依你的代理伺服器選擇</string>
+    <string name="proxy_type_http">HTTP</string>
+    <string name="proxy_type_socks">SOCKS</string>
+    <string name="proxy_host">代理主機，例如 127.0.0.1</string>
+    <string name="proxy_port">代理連接埠</string>
+    <string name="proxy_port_invalid">連接埠需介於 1–65535 之間</string>
+    <string name="source_tencent">騰訊應用寶</string>
+    <string name="source_tencent_summary">逐一套件查詢（該介面不支援批次），每次掃描最多檢查 80 個應用程式、並行上限 4，避免對公益介面造成壓力。</string>
+    <string name="app_list_permission_title">只讀取到很少的應用程式</string>
+    <string name="app_list_permission_summary">目前只讀到 %1$d 個應用程式。如果你的裝置上裝了更多應用程式，代表系統尚未放行「取得已安裝的應用程式資訊」權限。請在系統設定中允許後回到這裡下拉重新整理。</string>
+    <string name="app_list_permission_action">開啟系統設定</string>
+    <string name="about_version">版本</string>
+    <string name="about_package">套件名稱</string>
+    <string name="about_upstream">上游專案</string>
+    <string name="about_project">專案首頁</string>
+    <string name="about_license">開源授權</string>
+    <string name="about_based_on">以 apkupdater 3.x 為基礎重構，遵循 GPL-3.0 授權。</string>
 </resources>

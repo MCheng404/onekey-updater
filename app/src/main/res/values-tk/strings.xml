@@ -22,8 +22,6 @@
     <string name="root_install_not_supported">Bu programmanyň "root" gurnamagy goldanylmaýar.</string>
 
     // Settings
-    <string name="settings_portrait_columns">Portret sütünler</string>
-    <string name="settings_landscape_columns">Uzunlygyna sütünler</string>
     <string name="play_text_animations">Tekst animasiýalaryny oýnaň</string>
     <string name="settings_sources">Çeşmeler</string>
     <string name="settings_ui">UI</string>

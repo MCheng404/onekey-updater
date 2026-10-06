@@ -22,8 +22,6 @@
     <string name="root_install_not_supported">このアプリのrootインストールはサポートされていません。</string>
 
     // Settings
-    <string name="settings_portrait_columns">ポートレートモードでの列数</string>
-    <string name="settings_landscape_columns">ランドスケープモードでの列数</string>
     <string name="play_text_animations">テキストのアニメーションを再生する</string>
     <string name="settings_sources">ソース</string>
     <string name="settings_ui">UI</string>

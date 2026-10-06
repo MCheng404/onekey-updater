@@ -22,8 +22,6 @@
     <string name="root_install_not_supported">L\'installation root de cette application n\'est pas prise en charge.</string>
 
     // Settings
-    <string name="settings_portrait_columns">Colonnes en mode portrait</string>
-    <string name="settings_landscape_columns">Colonnes en mode paysage</string>
     <string name="play_text_animations">Animations de texte</string>
     <string name="settings_sources">Sources</string>
     <string name="settings_ui">Interface</string>
