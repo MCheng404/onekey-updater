@@ -46,10 +46,11 @@ class Downloader(
     /** 下载到缓存文件；失败抛 [DownloadException]，不会返回空文件。 */
     fun download(
         url: String,
-        onProgress: ((written: Long, total: Long) -> Unit)? = null
+        onProgress: ((written: Long, total: Long) -> Unit)? = null,
+        referer: String = ""
     ): File {
         val file = File(dir, randomUUID())
-        val response = executeWithRetry(url)
+        val response = executeWithRetry(url, referer)
         response.use { res ->
             if (!res.isSuccessful) {
                 throw DownloadException("HTTP ${res.code}（${res.message}）: $url")
@@ -83,8 +84,8 @@ class Downloader(
     }
 
     /** 以流的形式下载（边下边装）。失败抛 [DownloadException]。 */
-    fun downloadStream(url: String): DownloadStream {
-        val response = executeWithRetry(url)
+    fun downloadStream(url: String, referer: String = ""): DownloadStream {
+        val response = executeWithRetry(url, referer)
         if (!response.isSuccessful) {
             val code = response.code
             val message = response.message
@@ -102,11 +103,14 @@ class Downloader(
         else -> client
     }
 
-    private fun executeWithRetry(url: String): Response {
+    private fun executeWithRetry(url: String, referer: String = ""): Response {
         var last: IOException? = null
         repeat(MAX_ATTEMPTS) { attempt ->
             try {
-                val request = Request.Builder().url(url).build()
+                val request = Request.Builder()
+                    .url(url)
+                    .apply { if (referer.isNotEmpty()) header("Referer", referer) }
+                    .build()
                 return clientFor(url).newCall(request).execute()
             } catch (io: IOException) {
                 last = io

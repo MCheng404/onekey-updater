@@ -92,20 +92,20 @@ abstract class InstallViewModel(
             Link.Empty -> throw IllegalStateException(stringer.get(R.string.no_download_link))
 
             is Link.Url -> if (prefs.canSilentInstall()) {
-                val file = downloader.download(link.link)
+                val file = downloader.download(link.link, referer = link.referer)
                 val result = prefs.silentInstall(listOf(file))
                 installLog.emitStatus(
                     AppInstallStatus(result.success, update.id, true, result.message.takeIf { !result.success })
                 )
             } else {
                 requireInstallPermission()
-                downloader.downloadStream(link.link).use { download ->
+                downloader.downloadStream(link.link, link.referer).use { download ->
                     installer.install(update.id, update.packageName, download.stream, download.length)
                 }
             }
 
             is Link.Xapk -> if (prefs.canSilentInstall()) {
-                installer.installXapk(update.id, update.packageName, downloader.downloadStream(link.link).stream)
+                installer.installXapk(update.id, update.packageName, downloader.downloadStream(link.link, link.referer).stream)
             } else {
                 throw IllegalStateException(stringer.get(R.string.xapk_requires_root))
             }

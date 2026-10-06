@@ -53,7 +53,8 @@ import java.util.UUID
 class XiaomiRepository(
 	private val context: Context,
 	private val service: XiaomiService,
-	private val prefs: Prefs
+	private val prefs: Prefs,
+	private val webDetail: com.onekey.updater.util.net.XiaomiWebDetail
 ) {
 
 	companion object {
@@ -178,11 +179,32 @@ class XiaomiRepository(
 				oldVersionCode = local.versionCode,
 				source = XiaomiSource,
 				iconUri = local.iconUri,
-				// 拿不到下载地址，明确置空而不是塞一个假 URL
-				link = Link.Empty,
+				// 客户端的 /apm/download 被 downloadCtl 管控（实测带真实 OAID、完整签名、
+				// 调用方冒充、Android TLS 一律返回 apks=[]），因此改从**网页版详情页**取直链 ——
+				// 那是另一条完全公开、无需签名的通路。
+				link = resolveDownload(local.packageName),
 				whatsNew = remote.changeLog.ifBlank { remote.briefShow }
 			)
 		}
+	}
+
+	/**
+	 * 经网页版详情页解析下载地址。
+	 *
+	 * 页面给的 URL 是 http（CDN 同对象支持 https），且 CDN 开启防盗链 ——
+	 * 缺 `Referer: https://sj.qq.com/` 会返回一段 JS 而不是 APK，因此 referer 必须带上。
+	 */
+	private suspend fun resolveDownload(packageName: String): Link {
+		val detail = webDetail.fetch(packageName)
+		if (detail == null || detail.downloadUrl.isBlank()) {
+			Log.i(TAG, "未取到 $packageName 的下载地址，该条目仅供查看版本")
+			return Link.Empty
+		}
+		return Link.Url(
+			detail.downloadUrl,
+			detail.sizeBytes,
+			com.onekey.updater.util.net.XiaomiWebDetail.REFERER
+		)
 	}
 
 	/**

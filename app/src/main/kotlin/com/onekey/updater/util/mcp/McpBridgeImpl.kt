@@ -126,7 +126,7 @@ class McpBridgeImpl(
         Link.Empty -> McpInstallResult(false, "该来源没有提供下载地址")
 
         is Link.Url -> if (prefs.canSilentInstall()) {
-            val file = downloader.download(link.link)
+            val file = downloader.download(link.link, referer = link.referer)
             val result = prefs.silentInstall(listOf(file))
             McpInstallResult(result.success, if (result.success) "Root 静默安装成功" else result.message)
         } else {
@@ -134,7 +134,7 @@ class McpBridgeImpl(
                 // 无界面场景下只能明确告知，让 Agent/用户去授权
                 return McpInstallResult(false, "缺少「安装未知应用」权限，请在设备上授予后重试")
             }
-            val ok = downloader.downloadStream(link.link).use { download ->
+            val ok = downloader.downloadStream(link.link, link.referer).use { download ->
                 installer.install(update.id, update.packageName, download.stream, download.length)
             }
             McpInstallResult(ok, if (ok) "安装成功" else "安装被取消或失败，详情见设备上的提示")
@@ -144,7 +144,7 @@ class McpBridgeImpl(
             // 必须用真实结果：此前这里硬编码 true，导致安装实际失败（会话创建/写入报错）
             // 时也向调用方回报「已提交 Root 安装」，谎报成功。
             val ok = installer.installXapk(
-                update.id, update.packageName, downloader.downloadStream(link.link).stream
+                update.id, update.packageName, downloader.downloadStream(link.link, link.referer).stream
             )
             McpInstallResult(
                 ok,

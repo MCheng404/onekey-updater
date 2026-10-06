@@ -27,6 +27,7 @@ import com.onekey.updater.service.GitHubService
 import com.onekey.updater.service.TencentService
 import com.onekey.updater.service.VivoService
 import com.onekey.updater.service.XiaomiService
+import com.onekey.updater.util.net.XiaomiWebDetail
 import com.onekey.updater.service.GitLabService
 import com.onekey.updater.util.Badger
 import com.onekey.updater.util.Clipboard
@@ -157,7 +158,10 @@ val mainModule = module {
 			.create(XiaomiService::class.java)
 	}
 
-	single { XiaomiRepository(androidContext(), get(), get()) }
+	single { XiaomiRepository(androidContext(), get(), get(), get()) }
+
+	// 小米商店网页版详情页解析（客户端下载端点被 downloadCtl 管控，网页版是另一条通路）
+	single { XiaomiWebDetail(get()) }
 
 	// vivo 应用商店：端点只接受 POST + form-urlencoded，User-Agent 由请求头单独指定
 	single {
