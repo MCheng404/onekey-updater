@@ -16,6 +16,7 @@ import com.onekey.updater.repository.GitLabRepository
 import com.onekey.updater.repository.PlayRepository
 import com.onekey.updater.repository.SearchRepository
 import com.onekey.updater.repository.TencentRepository
+import com.onekey.updater.repository.VivoRepository
 import com.onekey.updater.repository.XiaomiRepository
 import com.onekey.updater.repository.UpdatesRepository
 import com.onekey.updater.service.ApkMirrorService
@@ -24,6 +25,7 @@ import com.onekey.updater.service.AptoideService
 import com.onekey.updater.service.FdroidService
 import com.onekey.updater.service.GitHubService
 import com.onekey.updater.service.TencentService
+import com.onekey.updater.service.VivoService
 import com.onekey.updater.service.XiaomiService
 import com.onekey.updater.service.GitLabService
 import com.onekey.updater.util.Badger
@@ -157,6 +159,18 @@ val mainModule = module {
 
 	single { XiaomiRepository(androidContext(), get(), get()) }
 
+	// vivo 应用商店：端点只接受 POST + form-urlencoded，User-Agent 由请求头单独指定
+	single {
+		Retrofit.Builder()
+			.client(get())
+			.baseUrl("https://update.appstore.vivo.com.cn/")
+			.addConverterFactory(GsonConverterFactory.create(get()))
+			.build()
+			.create(VivoService::class.java)
+	}
+
+	single { VivoRepository(androidContext(), get(), get(), get()) }
+
 	single {
 		Retrofit.Builder()
 			.client(get())
@@ -250,7 +264,7 @@ val mainModule = module {
 	single {
 		UpdatesRepository(
 			get(), get(), get(), get(named("main")), get(named("izzy")),
-			get(), get(), get(), get(), get(), get(), get()
+			get(), get(), get(), get(), get(), get(), get(), get()
 		)
 	}
 

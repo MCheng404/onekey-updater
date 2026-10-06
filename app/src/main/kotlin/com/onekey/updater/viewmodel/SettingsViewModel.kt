@@ -85,6 +85,7 @@ class SettingsViewModel(
 	fun setUsePlay(v: Boolean) = put { prefs.usePlay.put(v) }
 	fun setUseTencent(v: Boolean) = put { prefs.useTencent.put(v) }
 	fun setUseXiaomi(v: Boolean) = put { prefs.useXiaomi.put(v) }
+	fun setUseVivo(v: Boolean) = put { prefs.useVivo.put(v) }
 
 	// ---------------- 过滤 ----------------
 
@@ -355,6 +356,7 @@ class SettingsViewModel(
 		useApkPure = prefs.useApkPure.get(),
 		useTencent = prefs.useTencent.get(),
 		useXiaomi = prefs.useXiaomi.get(),
+		useVivo = prefs.useVivo.get(),
 		usePlay = prefs.usePlay.get(),
 		ignoreAlpha = prefs.ignoreAlpha.get(),
 		ignoreBeta = prefs.ignoreBeta.get(),

@@ -126,6 +126,12 @@ private fun SourcesSection(s: SettingsSnapshot, vm: SettingsViewModel) {
 	Toggle(stringResource(R.string.source_aptoide), checked = s.useAptoide, onChange = vm::setUseAptoide)
 	Toggle(stringResource(R.string.source_apkpure), checked = s.useApkPure, onChange = vm::setUseApkPure)
 	Toggle(
+		stringResource(R.string.source_vivo),
+		summary = stringResource(R.string.source_vivo_summary),
+		checked = s.useVivo,
+		onChange = vm::setUseVivo
+	)
+	Toggle(
 		stringResource(R.string.source_xiaomi),
 		summary = stringResource(R.string.source_xiaomi_summary),
 		checked = s.useXiaomi,

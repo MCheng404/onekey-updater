@@ -221,4 +221,8 @@
     // 小米应用商店来源
     <string name="source_xiaomi">小米应用商店</string>
     <string name="source_xiaomi_summary">仅提供版本检查。下载地址需要小米设备身份（xmsf）才能取得，因此该来源的条目可以看到但无法安装。默认关闭。</string>
+
+    // vivo 应用商店来源
+    <string name="source_vivo">vivo 应用商店</string>
+    <string name="source_vivo_summary">无需签名、无需设备身份 —— 也是唯一能拿到可直接下载 https 地址的国产商店。商店未收录的应用不会出现。</string>
 </resources>

@@ -35,6 +35,7 @@ object AppGrouping {
         "GitLab",
         "Tencent MyApp",
         "Xiaomi Store",
+        "vivo App Store",
         "Play",
         "Aptoide",
         "ApkPure",

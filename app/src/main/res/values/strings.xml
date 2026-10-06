@@ -233,4 +233,8 @@
     // Xiaomi Store source
     <string name="source_xiaomi">Xiaomi Store</string>
     <string name="source_xiaomi_summary">Version check only. Download links require a Xiaomi device identity (xmsf), so entries from this source can be seen but not installed. Off by default.</string>
+
+    // vivo store source
+    <string name="source_vivo">vivo App Store</string>
+    <string name="source_vivo_summary">No signing and no device identity required — the only domestic store that also returns a directly downloadable https link. Apps the store does not carry will never appear.</string>
 </resources>

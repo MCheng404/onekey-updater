@@ -149,8 +149,19 @@ fun Spanned.toAnnotatedString(): AnnotatedString = buildAnnotatedString {
 	}
 }
 
-fun OkHttpClient.Builder.addUserAgentInterceptor(agent: String) = addNetworkInterceptor {
-	it.proceed(it.request().newBuilder().header("User-Agent", agent).build())
+/**
+ * 统一 User-Agent。
+ *
+ * 只在请求**没有**自带 UA 时才填：某些厂商商店（vivo）会用请求头做客户端校验，
+ * 必须发送它们期望的原生 Dalvik UA；若这里无条件覆盖，签名对了也会被服务端拒。
+ */
+fun OkHttpClient.Builder.addUserAgentInterceptor(agent: String) = addNetworkInterceptor { chain ->
+	val request = chain.request()
+	if (request.header("User-Agent") != null) {
+		chain.proceed(request)
+	} else {
+		chain.proceed(request.newBuilder().header("User-Agent", agent).build())
+	}
 }
 
 fun filterVersionTag(version: String) = version

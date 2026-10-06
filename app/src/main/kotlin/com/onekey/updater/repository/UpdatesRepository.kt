@@ -29,6 +29,7 @@ class UpdatesRepository(
     private val playRepository: PlayRepository,
     private val tencentRepository: TencentRepository,
     private val xiaomiRepository: XiaomiRepository,
+    private val vivoRepository: VivoRepository,
     private val prefs: Prefs
 ) {
 
@@ -73,6 +74,7 @@ class UpdatesRepository(
                 if (prefs.usePlay.get()) sources.add(playRepository.updates(filtered))
                 if (prefs.useTencent.get()) sources.add(tencentRepository.updates(filtered))
                 if (prefs.useXiaomi.get()) sources.add(xiaomiRepository.updates(filtered))
+                if (prefs.useVivo.get()) sources.add(vivoRepository.updates(filtered))
 
                 if (sources.isEmpty()) {
                     emit(UpdateScan(emptyList(), filtered.size, systemIncluded))

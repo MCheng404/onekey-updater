@@ -14,6 +14,7 @@ import com.onekey.updater.data.ui.IzzySource
 import com.onekey.updater.data.ui.Link
 import com.onekey.updater.data.ui.PlaySource
 import com.onekey.updater.data.ui.TencentSource
+import com.onekey.updater.data.ui.VivoSource
 import com.onekey.updater.data.ui.XiaomiSource
 import com.onekey.updater.prefs.Prefs
 import com.onekey.updater.repository.UpdatesRepository
@@ -199,7 +200,8 @@ class McpBridgeImpl(
         Triple(PlaySource.name, { prefs.usePlay.get() }, { v -> prefs.usePlay.put(v) }),
         Triple(ApkMirrorSource.name, { prefs.useApkMirror.get() }, { v -> prefs.useApkMirror.put(v) }),
         Triple(TencentSource.name, { prefs.useTencent.get() }, { v -> prefs.useTencent.put(v) }),
-        Triple(XiaomiSource.name, { prefs.useXiaomi.get() }, { v -> prefs.useXiaomi.put(v) })
+        Triple(XiaomiSource.name, { prefs.useXiaomi.get() }, { v -> prefs.useXiaomi.put(v) }),
+        Triple(VivoSource.name, { prefs.useVivo.get() }, { v -> prefs.useVivo.put(v) })
     )
 
     override fun sources(): List<McpSource> =

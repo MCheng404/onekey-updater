@@ -42,6 +42,13 @@ class Prefs(
 	/** 小米商店的匿名设备标识（oaId）。留空则用占位值。 */
 	val xiaomiOaId = string("xiaomiOaId", defValue = "", backed = true)
 
+	/**
+	 * vivo 应用商店。**默认关闭**：该源是当前唯一无需签名、无需设备身份，
+	 * 且能拿到可直接下载的 https 地址的国产商店，但同样存在「商店未收录」的情况，
+	 * 故按需开启。
+	 */
+	val useVivo = boolean("useVivo", defValue = false, backed = true)
+
 	/** 是否允许在无 root 时改用 Shizuku 做静默安装。 */
 	val useShizuku = boolean("useShizuku", defValue = true, backed = true)
 
