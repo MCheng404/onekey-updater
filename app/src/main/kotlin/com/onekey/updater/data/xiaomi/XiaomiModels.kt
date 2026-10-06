@@ -36,6 +36,12 @@ data class XiaomiUpdateResponse(
     @SerializedName("support64Pkgs") val support64Packages: List<String> = emptyList(),
     /** 有更新的条目。传当前版本号时会是空数组——那是正确的「已是最新」，不是故障。 */
     @SerializedName("listApp") val listApp: List<XiaomiApp> = emptyList(),
+    /**
+     * MIUI 系统应用更新。**需要请求里带 `com.miui.core|0|0` 标记包才会返回** ——
+     * 服务端按包名匹配来决定是否下发这个数组。该标记只是请求上下文，
+     * 响应回来后必须跟真实已装包对账，标记包本身绝不能成为可见更新。
+     */
+    @SerializedName("miuiApp") val miuiApp: List<XiaomiApp> = emptyList(),
     @SerializedName("serverTimestamp") val serverTimestamp: Long = 0L
 )
 

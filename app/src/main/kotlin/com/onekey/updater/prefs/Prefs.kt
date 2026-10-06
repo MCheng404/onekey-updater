@@ -39,8 +39,14 @@ class Prefs(
 	 */
 	val useXiaomi = boolean("useXiaomi", defValue = false, backed = true)
 
-	/** 小米商店的匿名设备标识（oaId）。留空则用占位值。 */
+	/**
+	 * 小米商店的 OAID。**按应用分发**，只能由应用自己反射 `com.android.id.impl.IdProviderImpl` 取得；
+	 * 取不到时回落为一个基于随机种子的稳定值（非硬件标识）。
+	 */
 	val xiaomiOaId = string("xiaomiOaId", defValue = "", backed = true)
+
+	/** 小米服务端下发的加密设备上下文（dctx），换取下载地址与 miuiApp 通道时需要。 */
+	val xiaomiDctx = string("xiaomiDctx", defValue = "", backed = true)
 
 	/**
 	 * vivo 应用商店。**默认关闭**：该源是当前唯一无需签名、无需设备身份，

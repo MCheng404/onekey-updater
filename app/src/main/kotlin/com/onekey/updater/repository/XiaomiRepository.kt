@@ -10,6 +10,8 @@ import com.onekey.updater.data.ui.XiaomiSource
 import com.onekey.updater.prefs.Prefs
 import com.onekey.updater.service.XiaomiService
 import com.onekey.updater.util.AppLog
+import com.onekey.updater.util.net.XiaomiIdentity
+import com.onekey.updater.util.net.XiaomiSigner
 import com.onekey.updater.util.filterVersionTag
 import io.github.g00fy2.versioncompare.Version
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +58,16 @@ class XiaomiRepository(
 
 	companion object {
 		private const val TAG = "XiaomiRepository"
+
+		/**
+		 * MIUI 系统应用通道的标记包。
+		 *
+		 * 小米的 `updateinfo/v2` 响应里有 `listApp` 与 `miuiApp` **两个平行数组**，
+		 * 而 `miuiApp` 只有在请求的包名列表里出现这个包时才会下发（服务端按包名匹配）。
+		 * 版本号填 0，含义是「不假装知道已装版本」—— 它只是请求上下文，
+		 * 响应回来后与真实已装包对账，标记包本身不会成为可见更新。
+		 */
+		const val MIUI_ANCHOR = "com.miui.core"
 
 		/**
 		 * 单批多少个应用。
@@ -106,7 +118,14 @@ class XiaomiRepository(
 	}
 
 	private suspend fun query(chunk: List<AppInstalled>): List<AppUpdate> {
-		val response = service.checkUpdates(baseParams(chunk))
+		// dctx 是服务端下发的加密设备上下文，下载地址与 miuiApp 通道都依赖它。
+		// 实测结论：即便带上**本应用真实的 OAID**，服务端也不会给第三方更新器下发 dctx。
+		// 因此这里只在「还没试过」时试一次（ensureDctx 内有进程内闸门）——
+		// 否则一次扫描会对着 /apm/expId 打几十次，既慢又像刷接口，反而可能招来风控。
+		val dctx = XiaomiIdentity.cachedDctx(prefs).ifBlank {
+			XiaomiIdentity.ensureDctx(prefs) { baseParams(chunk, emptyList()) }.orEmpty()
+		}
+		val response = service.checkUpdates(baseParams(chunk, listOf(dctx)))
 
 		// 小米被风控/拦参时返回的是 HTTP 200 + errCode，而不是 4xx/5xx ——
 		// 不显式判断的话，这个响应会被解析成「listApp 为空」，表现与「确实没有更新」
@@ -127,7 +146,12 @@ class XiaomiRepository(
 				"，商店未收录 " + response.invalidPackages.size
 		)
 
-		return response.listApp.mapNotNull { remote ->
+		val entries = response.listApp.map { it to false } + response.miuiApp.map { it to true }
+		if (response.miuiApp.isNotEmpty()) {
+			Log.i(TAG, "miuiApp 通道返回 " + response.miuiApp.size + " 条 MIUI 系统应用更新")
+		}
+
+		return entries.mapNotNull { (remote, isSystem) ->
 			val local = byPackage[remote.packageName] ?: return@mapNotNull null
 			if (remote.versionCode <= local.versionCode) return@mapNotNull null
 
@@ -168,7 +192,12 @@ class XiaomiRepository(
 	 * `errCode:4 参数不能为空`。其余字段是设备指纹与能力开关，服务端会拿它们做
 	 * 真实性校验 —— 缺失未必报错，但会被降级处理，所以这里尽量给全。
 	 */
-	private fun baseParams(chunk: List<AppInstalled>): Map<String, String> {
+	/**
+	 * 构造请求参数。
+	 *
+	 * @param dctx 服务端下发的设备上下文，非空才会带上。
+	 */
+	private suspend fun baseParams(chunk: List<AppInstalled>, dctx: List<String>): Map<String, String> {
 		val metrics = context.resources.displayMetrics
 		val release = Build.VERSION.RELEASE.orEmpty().ifBlank { Build.VERSION.SDK_INT.toString() }
 		val model = Build.MODEL.orEmpty().ifBlank { "Android" }
@@ -206,8 +235,9 @@ class XiaomiRepository(
 			put("webResVersion", "1")
 			put("hybridFrameworkVersion", "1")
 			put("supportedIslandVersion", "1")
-			// 匿名设备标识：拿不到真实 oaId 时用占位值
-			put("oaId", prefs.xiaomiOaId.get().ifBlank { "6f24320b1e9596bf" })
+			// 设备标识：优先用本应用真实的 OAID（按应用分发，只能反射取），
+			// 取不到才回落到稳定占位值 —— 服务端不认可占位值，也就不会下发 dctx。
+			put("oaId", XiaomiIdentity.oaId(context, prefs))
 
 			// —— 能力开关 ——
 			put("clientConfigVersion", "447")
@@ -240,9 +270,12 @@ class XiaomiRepository(
 			put("ref", "update")
 			put("callerPackageName", "com.xiaomi.market")
 			put("sourcePackage", "com.xiaomi.market")
-			put("packageName", chunk.joinToString(",") { it.packageName })
-			put("versionCode", chunk.joinToString(",") { it.versionCode.toString() })
+
 			put("oldApkHash", "")
+			// 追加 MIUI 标记包以激活 miuiApp 通道（版本号 0 = 不假装知道已装版本）
+			put("packageName", (chunk.map { it.packageName } + MIUI_ANCHOR).joinToString(","))
+			put("versionCode", (chunk.map { it.versionCode.toString() } + "0").joinToString(","))
+			dctx.firstOrNull()?.takeIf { it.isNotBlank() }?.let { put("dctx", it) }
 			put("apkSource", "")
 			put("splits", "")
 			put("installedByMarket", "")
