@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withTimeout
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -66,12 +67,37 @@ class McpServer(
         private const val MAX_PORT = 65535
         private const val MAX_BODY_BYTES = 512 * 1024
         private const val TOOL_TIMEOUT_MS = 120_000L
+
+        /** 同时执行的耗时工具数上限。 */
+        private const val MAX_CONCURRENT_TOOL_CALLS = 2
     }
 
     private val stateFlow = MutableStateFlow(McpState(port = normalizedPort()))
 
-    private val pool = Executors.newFixedThreadPool(4)
+    /**
+     * 处理 HTTP 请求的线程池。
+     *
+     * 原为固定 4 个线程，而这些线程几乎全部时间都阻塞在等待工具执行完成
+     * （单个工具最长 120 秒），所以「线程数」实际上等于「能同时服务的请求数」。
+     * 4 太少：一次 list_updates 就能占住一个，而客户端往往会连发扫描。
+     * 提到 8，同时由 [toolGate] 限制真正耗时的工具并发，避免扫描堆积。
+     */
+    private val pool = Executors.newFixedThreadPool(8)
     private val closing = AtomicBoolean(false)
+
+    /**
+     * 耗时工具的并发闸门。
+     *
+     * 为什么要它：工具最长可跑 120 秒（一次完整扫描）。若不加限制，
+     * 客户端连续调用几次 list_updates 就会把线程池全部占死，
+     * 连 get_recent_logs 这种毫秒级请求也排队等不到执行 —— 实测出现过
+     * 一次扫描期间廉价请求被压了 75 秒。
+     *
+     * 现在超过并发上限时**立刻返回 JSON-RPC 错误**，把「排队等一分钟」
+     * 变成「马上告诉调用方稍后重试」。对 AI Agent 来说，可预期的快速失败
+     * 远好过静默挂起。
+     */
+    private val toolGate = Semaphore(MAX_CONCURRENT_TOOL_CALLS)
 
     @Volatile
     private var serverSocket: ServerSocket? = null
@@ -480,14 +506,25 @@ class McpServer(
     }
 
     private fun toolsCall(req: JsonObject): JsonObject {
+        // 先把参数解析完再取闸门：解析阶段抛异常时还没持有许可，
+        // 否则 finally 尚未进入、许可永远不归还，后续所有工具调用都会被「服务器正忙」拒掉。
         val params = req.getAsJsonObject("params")
             ?: throw IllegalArgumentException("缺少 params")
         val name = params.get("name")?.asString
             ?: throw IllegalArgumentException("缺少工具名")
         val args = params.getAsJsonObject("arguments") ?: JsonObject()
 
-        val text = runBlocking {
-            withTimeout(TOOL_TIMEOUT_MS) { runTool(name, args) }
+        if (!toolGate.tryAcquire()) {
+            throw IllegalStateException("服务器正忙（最多并发 " + MAX_CONCURRENT_TOOL_CALLS + " 个耗时操作），请稍后重试")
+        }
+
+        val text = try {
+            runBlocking {
+                withTimeout(TOOL_TIMEOUT_MS) { runTool(name, args) }
+            }
+        } finally {
+            // 必须在 finally 释放：runTool 抛异常时闸门不能被永久占住
+            toolGate.release()
         }
         return JsonObject().apply {
             add("content", JsonArray().apply {
