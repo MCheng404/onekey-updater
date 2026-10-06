@@ -2,6 +2,7 @@ package com.onekey.updater.util.mcp
 
 import android.content.Context
 import com.onekey.updater.data.ui.ApkMirrorSource
+import com.onekey.updater.domain.AppGrouping
 import com.onekey.updater.data.ui.ApkPureSource
 import com.onekey.updater.data.ui.AppUpdate
 import com.onekey.updater.data.ui.UpdateScan
@@ -56,11 +57,10 @@ class McpBridgeImpl(
         val scan = runScan()
         val groups = scan.updates.groupBy { it.packageName }
         val items = groups.map { (pkg, candidates) ->
-            // 推荐来源 = 版本号最高者（versionCode 可用时优先，数值最可靠）
-            val best = candidates.maxWithOrNull(
-                compareBy<AppUpdate> { it.versionCode }
-                    .thenBy { runCatching { filterVersionTag(it.version) }.getOrDefault("") }
-            ) ?: candidates.first()
+            // 推荐来源交给 domain 层判定，与界面用完全相同的规则。
+            // 此前这里自成一套（只按 versionCode + 版本名，与界面的三级比较器不同），
+            // 会导致同一个应用「界面推荐的来源」与「MCP 报告的推荐来源」对不上。
+            val best = AppGrouping.recommended(candidates) ?: candidates.first()
             McpAppUpdate(
                 name = best.name.ifEmpty { pkg },
                 packageName = pkg,
