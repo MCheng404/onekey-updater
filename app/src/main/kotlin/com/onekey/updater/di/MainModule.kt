@@ -16,6 +16,7 @@ import com.onekey.updater.repository.GitLabRepository
 import com.onekey.updater.repository.PlayRepository
 import com.onekey.updater.repository.SearchRepository
 import com.onekey.updater.repository.TencentRepository
+import com.onekey.updater.repository.XiaomiRepository
 import com.onekey.updater.repository.UpdatesRepository
 import com.onekey.updater.service.ApkMirrorService
 import com.onekey.updater.service.ApkPureService
@@ -23,6 +24,7 @@ import com.onekey.updater.service.AptoideService
 import com.onekey.updater.service.FdroidService
 import com.onekey.updater.service.GitHubService
 import com.onekey.updater.service.TencentService
+import com.onekey.updater.service.XiaomiService
 import com.onekey.updater.service.GitLabService
 import com.onekey.updater.util.Badger
 import com.onekey.updater.util.Clipboard
@@ -143,6 +145,18 @@ val mainModule = module {
 
 	single { TencentRepository(get(), get()) }
 
+	// 小米应用商店：baseUrl 固定为 updateinfo 主机，注意该端点只接受 POST
+	single {
+		Retrofit.Builder()
+			.client(get())
+			.baseUrl("https://updateinfo.market.xiaomi.com")
+			.addConverterFactory(GsonConverterFactory.create(get()))
+			.build()
+			.create(XiaomiService::class.java)
+	}
+
+	single { XiaomiRepository(androidContext(), get(), get()) }
+
 	single {
 		Retrofit.Builder()
 			.client(get())
@@ -236,7 +250,7 @@ val mainModule = module {
 	single {
 		UpdatesRepository(
 			get(), get(), get(), get(named("main")), get(named("izzy")),
-			get(), get(), get(), get(), get(), get()
+			get(), get(), get(), get(), get(), get(), get()
 		)
 	}
 

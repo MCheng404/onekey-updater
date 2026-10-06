@@ -34,6 +34,7 @@ object AppGrouping {
         "F-Droid (Izzy)",
         "GitLab",
         "Tencent MyApp",
+        "Xiaomi Store",
         "Play",
         "Aptoide",
         "ApkPure",

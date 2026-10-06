@@ -33,6 +33,15 @@ class Prefs(
 	/** 腾讯应用宝。逐包查询、限流限量，详见 TencentRepository。 */
 	val useTencent = boolean("useTencent", defValue = false, backed = true)
 
+	/**
+	 * 小米应用商店。**默认关闭**：该源目前只能查版本、拿不到下载地址（需 xmsf 设备身份），
+	 * 开启后条目只能看不能装。默认关是刻意的，避免用户误以为"开了就能更新"。
+	 */
+	val useXiaomi = boolean("useXiaomi", defValue = false, backed = true)
+
+	/** 小米商店的匿名设备标识（oaId）。留空则用占位值。 */
+	val xiaomiOaId = string("xiaomiOaId", defValue = "", backed = true)
+
 	/** 是否允许在无 root 时改用 Shizuku 做静默安装。 */
 	val useShizuku = boolean("useShizuku", defValue = true, backed = true)
 

@@ -229,4 +229,8 @@
     <string name="ignore_confirm_ok">Ignore</string>
     <string name="confirm_ignore">Confirm before ignoring</string>
     <string name="confirm_ignore_summary">Show a confirmation dialog when you ignore an app.</string>
+
+    // Xiaomi Store source
+    <string name="source_xiaomi">Xiaomi Store</string>
+    <string name="source_xiaomi_summary">Version check only. Download links require a Xiaomi device identity (xmsf), so entries from this source can be seen but not installed. Off by default.</string>
 </resources>

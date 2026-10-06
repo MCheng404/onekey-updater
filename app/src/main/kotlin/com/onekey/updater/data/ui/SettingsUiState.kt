@@ -17,6 +17,7 @@ data class SettingsSnapshot(
 	val useAptoide: Boolean = true,
 	val useApkPure: Boolean = true,
 	val useTencent: Boolean = false,
+	val useXiaomi: Boolean = false,
 	val usePlay: Boolean = true,
 
 	// 过滤

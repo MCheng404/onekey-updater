@@ -217,4 +217,8 @@
     <string name="ignore_confirm_ok">忽略</string>
     <string name="confirm_ignore">忽略前二次确认</string>
     <string name="confirm_ignore_summary">忽略应用时弹出确认框，避免误触。</string>
+
+    // 小米应用商店来源
+    <string name="source_xiaomi">小米应用商店</string>
+    <string name="source_xiaomi_summary">仅提供版本检查。下载地址需要小米设备身份（xmsf）才能取得，因此该来源的条目可以看到但无法安装。默认关闭。</string>
 </resources>
