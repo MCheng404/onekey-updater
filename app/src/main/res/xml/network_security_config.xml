@@ -6,8 +6,12 @@
      把明文面收敛到最小。 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />
+    <!-- vivo 应用商店：其下载接口 302 跳转到 apkwificdn*-v6dl.vivo.com.cn，
+         该 CDN 只提供明文 HTTP（实测 https 直接 403），
+         不放行则 vivo 来源全部无法下载。 -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">dd.qq.com</domain>
         <domain includeSubdomains="true">qq.com</domain>
+        <domain includeSubdomains="true">vivo.com.cn</domain>
     </domain-config>
 </network-security-config>

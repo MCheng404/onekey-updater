@@ -1,888 +1,213 @@
 package com.onekey.updater.ui.screen
 
-import android.Manifest
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.net.toUri
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.updater.BuildConfig
 import com.onekey.updater.R
+import com.onekey.updater.data.ui.SettingsRoute
 import com.onekey.updater.data.ui.SettingsSnapshot
-import com.onekey.updater.ui.theme.ThemePref
-import com.onekey.updater.util.InstallMode
-import com.onekey.updater.util.net.Mirrors
-import com.onekey.updater.util.net.NetworkDiagnostics
+import com.onekey.updater.ui.component.SettingsGroup
 import com.onekey.updater.viewmodel.SettingsViewModel
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.WorldClock
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SliderPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-
-
-@Composable
-fun SettingsScreen(viewModel: SettingsViewModel) {
-	val settings = viewModel.state().collectAsStateWithLifecycle().value
-
-	Column {
-		SmallTopAppBar(
-			title = stringResource(R.string.tab_settings))
-
-		LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
-			item { SourcesSection(settings, viewModel) }
-			item { Divider() }
-			item { FilterSection(settings, viewModel) }
-			item { Divider() }
-			item { UpdateScopeSection(settings, viewModel) }
-			item { Divider() }
-			item { InstallSection(settings, viewModel) }
-			item { Divider() }
-			item { ChinaNetworkSection(settings, viewModel) }
-			item { Divider() }
-			item { ProxySection(settings, viewModel) }
-			item { Divider() }
-			item { McpSection(settings, viewModel) }
-			item { Divider() }
-			item { AlarmSection(settings, viewModel) }
-			item { Divider() }
-			item { UiSection(settings, viewModel) }
-			item { Divider() }
-			item { ToolsSection(viewModel) }
-			item { Divider() }
-			item { AboutSection() }
-		}
-	}
-}
-
-@Composable
-private fun Divider() = HorizontalDivider(
-	Modifier.padding(vertical = 8.dp, horizontal = 16.dp),
-	color = MiuixTheme.colorScheme.dividerLine
-)
-
-/** 常用开关的简写，避免每个开关都写一遍 checked/onCheckedChange。 */
-@Composable
-private fun Toggle(
-	title: String,
-	summary: String? = null,
-	checked: Boolean,
-	onChange: (Boolean) -> Unit
-) = SwitchPreference(
-	title = title,
-	summary = summary,
-	checked = checked,
-	onCheckedChange = onChange
-)
-
-// ---------------------------------------------------------------- 更新来源
-
-@Composable
-private fun SourcesSection(s: SettingsSnapshot, vm: SettingsViewModel) {
-	SmallTitle(stringResource(R.string.settings_sources))
-	Toggle(stringResource(R.string.source_github), checked = s.useGitHub, onChange = vm::setUseGitHub)
-	Toggle(stringResource(R.string.source_fdroid), checked = s.useFdroid, onChange = vm::setUseFdroid)
-	Toggle(stringResource(R.string.source_izzy), checked = s.useIzzy, onChange = vm::setUseIzzy)
-	Toggle(stringResource(R.string.source_gitlab), checked = s.useGitLab, onChange = vm::setUseGitLab)
-	Toggle(stringResource(R.string.source_aptoide), checked = s.useAptoide, onChange = vm::setUseAptoide)
-	Toggle(stringResource(R.string.source_apkpure), checked = s.useApkPure, onChange = vm::setUseApkPure)
-	Toggle(
-		stringResource(R.string.source_vivo),
-		summary = stringResource(R.string.source_vivo_summary),
-		checked = s.useVivo,
-		onChange = vm::setUseVivo
-	)
-	Toggle(
-		stringResource(R.string.source_xiaomi),
-		summary = stringResource(R.string.source_xiaomi_summary),
-		checked = s.useXiaomi,
-		onChange = vm::setUseXiaomi
-	)
-	Toggle(
-		stringResource(R.string.source_tencent),
-		summary = stringResource(R.string.source_tencent_summary),
-		checked = s.useTencent,
-		onChange = vm::setUseTencent
-	)
-	Toggle(
-		stringResource(R.string.source_apkmirror),
-		summary = stringResource(R.string.source_apkmirror_summary),
-		checked = s.useApkMirror,
-		onChange = vm::setUseApkMirror
-	)
-	Toggle(
-		stringResource(R.string.source_play),
-		summary = stringResource(R.string.source_play_summary),
-		checked = s.usePlay,
-		onChange = vm::setUsePlay
-	)
-}
-
-// ---------------------------------------------------------------- 过滤
-
-@Composable
-private fun FilterSection(s: SettingsSnapshot, vm: SettingsViewModel) {
-	SmallTitle(stringResource(R.string.settings_filter))
-	Toggle(
-		stringResource(R.string.ignore_alpha),
-		checked = s.ignoreAlpha,
-		onChange = vm::setIgnoreAlpha
-	)
-	Toggle(
-		stringResource(R.string.ignore_beta),
-		checked = s.ignoreBeta,
-		onChange = vm::setIgnoreBeta
-	)
-	Toggle(
-		stringResource(R.string.ignore_preRelease),
-		checked = s.ignorePreRelease,
-		onChange = vm::setIgnorePreRelease
-	)
-	Toggle(
-		stringResource(R.string.use_safe_stores),
-		summary = stringResource(R.string.use_safe_stores_summary),
-		checked = s.useSafeStores,
-		onChange = vm::setUseSafeStores
-	)
-}
-
-// ---------------------------------------------------------------- 更新范围
-
-@Composable
-private fun UpdateScopeSection(s: SettingsSnapshot, vm: SettingsViewModel) {
-	SmallTitle(stringResource(R.string.settings_update_scope))
-
-	Toggle(
-		stringResource(R.string.update_system_apps),
-		summary = stringResource(R.string.update_system_apps_summary),
-		checked = s.updateSystemApps,
-		onChange = vm::setUpdateSystemApps
-	)
-	Toggle(
-		stringResource(R.string.update_store_apps),
-		summary = stringResource(R.string.update_store_apps_summary),
-		checked = s.updateStoreApps,
-		onChange = vm::setUpdateStoreApps
-	)
-
-	// 这两项与「应用」页顶部三个图标的区别很容易混淆，必须写清楚
-	Text(
-		text = stringResource(R.string.update_scope_note),
-		style = MiuixTheme.textStyles.footnote1,
-		color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-		modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-	)
-}
-
-// ---------------------------------------------------------------- 安装
-
-@Composable
-private fun InstallSection(s: SettingsSnapshot, vm: SettingsViewModel) {
-	val rootState by vm.root().collectAsStateWithLifecycle()
-
-	SmallTitle(stringResource(R.string.settings_options))
-
-	WindowDropdownPreference(
-		title = stringResource(R.string.settings_install_mode),
-		summary = stringResource(R.string.settings_install_mode_summary),
-		items = listOf(
-			stringResource(R.string.install_mode_auto),
-			stringResource(R.string.install_mode_session),
-			stringResource(R.string.install_mode_root)
-		),
-		selectedIndex = s.installMode.coerceIn(0, 2),
-		onSelectedIndexChange = { vm.setInstallMode(it) }
-	)
-
-	Toggle(
-		stringResource(R.string.confirm_ignore),
-		summary = stringResource(R.string.confirm_ignore_summary),
-		checked = s.confirmIgnore,
-		onChange = vm::setConfirmIgnore
-	)
-	Toggle(
-		stringResource(R.string.shizuku_enable),
-		summary = stringResource(R.string.shizuku_enable_summary),
-		checked = s.useShizuku,
-		onChange = vm::setUseShizuku
-	)
-	ArrowPreference(
-		title = stringResource(R.string.shizuku_status),
-		summary = vm.shizukuStatus(),
-		onClick = { vm.openShizuku() }
-	)
-
-	ArrowPreference(
-		title = stringResource(R.string.root_status),
-		summary = when (rootState) {
-			SettingsViewModel.RootState.Granted -> stringResource(R.string.root_granted)
-			SettingsViewModel.RootState.Denied -> stringResource(R.string.root_denied)
-			SettingsViewModel.RootState.Checking -> stringResource(R.string.root_checking)
-			SettingsViewModel.RootState.Unknown -> stringResource(R.string.root_unknown)
-		},
-		onClick = { vm.requestRoot() }
-	)
-
-	Text(
-		text = stringResource(R.string.install_mode_note),
-		style = MiuixTheme.textStyles.footnote1,
-		color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-		modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-	)
-}
-
-// ---------------------------------------------------------------- 国内网络
-
-@Composable
-private fun ChinaNetworkSection(s: SettingsSnapshot, vm: SettingsViewModel) {
-	val diagnostics by vm.diagnostics().collectAsStateWithLifecycle()
-	var showDiagnostics by remember { mutableStateOf(false) }
-
-	SmallTitle(stringResource(R.string.settings_china_sources))
-
-	Toggle(
-		stringResource(R.string.use_china_mirror),
-		summary = stringResource(R.string.use_china_mirror_summary),
-		checked = s.useChinaMirror,
-		onChange = vm::setUseChinaMirror
-	)
-
-	WindowDropdownPreference(
-		title = stringResource(R.string.github_proxy),
-		summary = vm.effectiveGithubPrefix(),
-		items = Mirrors.githubProxies.map { it.label },
-		selectedIndex = s.githubProxyId.coerceIn(0, Mirrors.githubProxies.lastIndex),
-		onSelectedIndexChange = { vm.setGithubProxyId(it) }
-	)
-
-	if (Mirrors.githubProxies.getOrNull(s.githubProxyId)?.value == Mirrors.CUSTOM) {
-		CustomUrlField(
-			value = s.githubCustomProxy,
-			label = stringResource(R.string.github_custom_proxy),
-			onValueChange = vm::setGithubCustomProxy
-		)
-	}
-
-	Toggle(
-		stringResource(R.string.github_proxy_downloads),
-		checked = s.githubProxyDownloads,
-		onChange = vm::setGithubProxyDownloads
-	)
-
-	WindowDropdownPreference(
-		title = stringResource(R.string.fdroid_mirror),
-		summary = vm.effectiveFdroidRepo(),
-		items = Mirrors.fdroidMirrors.map { it.label },
-		selectedIndex = s.fdroidMirrorId.coerceIn(0, Mirrors.fdroidMirrors.lastIndex),
-		onSelectedIndexChange = { vm.setFdroidMirrorId(it) }
-	)
-
-	if (Mirrors.fdroidMirrors.getOrNull(s.fdroidMirrorId)?.value == Mirrors.CUSTOM) {
-		CustomUrlField(
-			value = s.fdroidCustomUrl,
-			label = stringResource(R.string.fdroid_custom_url),
-			onValueChange = vm::setFdroidCustomUrl
-		)
-	}
-
-	WindowDropdownPreference(
-		title = stringResource(R.string.izzy_mirror),
-		items = Mirrors.izzyMirrors.map { it.label },
-		selectedIndex = s.izzyMirrorId.coerceIn(0, Mirrors.izzyMirrors.lastIndex),
-		onSelectedIndexChange = { vm.setIzzyMirrorId(it) }
-	)
-
-	if (Mirrors.izzyMirrors.getOrNull(s.izzyMirrorId)?.value == Mirrors.CUSTOM) {
-		CustomUrlField(
-			value = s.izzyCustomUrl,
-			label = stringResource(R.string.izzy_custom_url),
-			onValueChange = vm::setIzzyCustomUrl
-		)
-	}
-
-	ArrowPreference(
-		title = stringResource(R.string.network_diagnostics),
-		summary = stringResource(R.string.network_diagnostics_summary),
-		startAction = {
-			Icon(
-				imageVector = MiuixIcons.WorldClock,
-				contentDescription = null,
-				modifier = Modifier.size(22.dp)
-			)
-		},
-		onClick = {
-			showDiagnostics = true
-			vm.runDiagnostics()
-		}
-	)
-
-	if (showDiagnostics) {
-		DiagnosticsDialog(
-			state = diagnostics,
-			onRerun = { vm.runDiagnostics() },
-			onOptimize = { vm.applyBestLines() },
-			onDismiss = { showDiagnostics = false }
-		)
-	}
-}
-
-@Composable
-private fun CustomUrlField(value: String, label: String, onValueChange: (String) -> Unit) = TextField(
-	value = value,
-	onValueChange = onValueChange,
-	modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-	label = label,
-	useLabelAsPlaceholder = true,
-	singleLine = true
-)
-
-// ---------------------------------------------------------------- MCP 服务
-
-@Composable
-private fun McpSection(s: SettingsSnapshot, vm: SettingsViewModel) {
-	val mcp by vm.mcpState().collectAsStateWithLifecycle()
-	// 端口用本地文本态：只有落进合法范围才提交，避免「每次按键都重绑服务」的抖动；
-	// 非法或输入中途的片段不写预存、也不重启。
-	var portText by remember(s.mcpPort) { mutableStateOf(s.mcpPort.toString()) }
-	var showToken by remember { mutableStateOf(false) }
-
-	SmallTitle(stringResource(R.string.mcp_service))
-
-	SwitchPreference(
-		title = stringResource(R.string.mcp_enable),
-		summary = stringResource(R.string.mcp_enable_summary),
-		checked = s.mcpEnabled,
-		onCheckedChange = vm::setMcpEnabled
-	)
-
-	TextField(
-		value = portText,
-		onValueChange = { input ->
-			val cleaned = input.filter { it.isDigit() }.take(5)
-			portText = cleaned
-			val v = cleaned.toIntOrNull()
-			// 合法即提交；4 位以上仍非法（如 70000）才提示，避免输入途中反复刷 snackbar
-			if (v != null && v in 1024..65535) {
-				vm.setMcpPort(v)
-			} else if (v != null && cleaned.length >= 4) {
-				vm.notifyMcpPortInvalid()
-			}
-		},
-		label = stringResource(R.string.mcp_port),
-		useLabelAsPlaceholder = true,
-		singleLine = true,
-		enabled = s.mcpEnabled,
-		keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-		modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
-	)
-
-	SwitchPreference(
-		title = stringResource(R.string.mcp_allow_lan),
-		summary = stringResource(R.string.mcp_allow_lan_summary),
-		checked = s.mcpAllowLan,
-		enabled = s.mcpEnabled,
-		onCheckedChange = vm::setMcpAllowLan
-	)
-
-	ArrowPreference(
-		title = stringResource(R.string.mcp_token),
-		summary = if (s.mcpToken.isBlank()) {
-			stringResource(R.string.mcp_token_unset)
-		} else {
-			maskToken(s.mcpToken)
-		},
-		onClick = { showToken = true }
-	)
-
-	// 实时状态：运行中（含监听地址）/ 已停止 / 出错（原文直出，绝不静默）
-	val (statusText, statusColor) = when {
-		mcp.error != null -> (stringResource(R.string.mcp_status_error) + "：" + mcp.error) to MiuixTheme.colorScheme.error
-		mcp.running -> (stringResource(R.string.mcp_status_running) + " · ${mcp.boundAddress}:${mcp.port}") to MiuixTheme.colorScheme.primary
-		else -> stringResource(R.string.mcp_status_stopped) to MiuixTheme.colorScheme.onSurfaceVariantSummary
-	}
-	Text(
-		text = statusText,
-		style = MiuixTheme.textStyles.footnote1,
-		color = statusColor,
-		modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-	)
-
-	// PC 侧连接命令：点一下复制
-	val adbCmd = "adb forward tcp:${s.mcpPort} tcp:${s.mcpPort}"
-	Row(
-		modifier = Modifier
-			.fillMaxWidth()
-			.padding(horizontal = 16.dp, vertical = 8.dp)
-			.clickable { vm.copyToClipboard(adbCmd) },
-		verticalAlignment = Alignment.CenterVertically
-	) {
-		Text(
-			text = stringResource(R.string.mcp_adb_hint),
-			style = MiuixTheme.textStyles.footnote1,
-			color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-		)
-		Spacer(Modifier.width(6.dp))
-		Text(
-			text = adbCmd,
-			style = MiuixTheme.textStyles.footnote2,
-			color = MiuixTheme.colorScheme.primary
-		)
-	}
-
-	if (showToken) {
-		McpTokenDialog(
-			token = s.mcpToken,
-			onDismiss = { showToken = false },
-			onCopy = { vm.copyToClipboard(s.mcpToken) },
-			onRegenerate = { vm.regenerateMcpToken() }
-		)
-	}
-}
-
-/** 令牌打码：保留首尾各 2 位，其余用 • 遮挡，避免长令牌在列表里占满一行。 */
-private fun maskToken(token: String): String = if (token.length <= 6) {
-	"•".repeat(token.length)
-} else {
-	token.take(2) + "•".repeat(token.length - 4) + token.takeLast(2)
-}
-
-@Composable
-private fun McpTokenDialog(
-	token: String,
-	onDismiss: () -> Unit,
-	onCopy: () -> Unit,
-	onRegenerate: () -> Unit
-) = OverlayDialog(
-	show = true,
-	title = stringResource(R.string.mcp_token_dialog_title),
-	summary = stringResource(R.string.mcp_token_dialog_summary),
-	onDismissRequest = onDismiss
-) {
-	Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-		Text(
-			text = token.ifBlank { stringResource(R.string.mcp_token_unset) },
-			style = MiuixTheme.textStyles.body2,
-			color = MiuixTheme.colorScheme.onSurface
-		)
-		Row(
-			modifier = Modifier.fillMaxWidth(),
-			horizontalArrangement = Arrangement.spacedBy(10.dp)
-		) {
-			TextButton(text = stringResource(R.string.mcp_token_copy), onClick = onCopy)
-			TextButton(text = stringResource(R.string.mcp_token_regenerate), onClick = onRegenerate)
-		}
-		Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-			Text(stringResource(R.string.close))
-		}
-	}
-}
-
-// ---------------------------------------------------------------- 定时检查
-
-@Composable
-private fun AlarmSection(s: SettingsSnapshot, vm: SettingsViewModel) {
-	// 通知权限只在真正需要时申请（定时检查/批量安装结果依赖通知反馈）。
-	// 上游在冷启动就申请，会直接把用户甩到系统设置页。
-	val notificationPermission = rememberLauncherForActivityResult(
-		ActivityResultContracts.RequestPermission()
-	) {}
-
-	SmallTitle(stringResource(R.string.settings_alarm))
-
-	Toggle(
-		stringResource(R.string.settings_alarm),
-		checked = s.enableAlarm,
-		onChange = { enabled ->
-			if (enabled) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-			vm.setEnableAlarm(enabled)
-		}
-	)
-	WindowDropdownPreference(
-		title = stringResource(R.string.frequency),
-		items = listOf(
-			stringResource(R.string.settings_alarm_daily),
-			stringResource(R.string.settings_alarm_3day),
-			stringResource(R.string.settings_alarm_weekly)
-		),
-		selectedIndex = s.alarmFrequency.coerceIn(0, 2),
-		enabled = s.enableAlarm,
-		onSelectedIndexChange = { vm.setAlarmFrequency(it) }
-	)
-	SliderPreference(
-		value = s.alarmHour.toFloat(),
-		onValueChange = { vm.setAlarmHour(it.toInt()) },
-		title = stringResource(R.string.settings_hour),
-		summary = "${s.alarmHour}:00",
-		valueRange = 0f..23f,
-		steps = 22,
-		enabled = s.enableAlarm
-	)
-}
-
-// ---------------------------------------------------------------- 界面
-
-@Composable
-private fun UiSection(s: SettingsSnapshot, vm: SettingsViewModel) {
-	SmallTitle(stringResource(R.string.settings_ui))
-
-	WindowDropdownPreference(
-		title = stringResource(R.string.theme),
-		items = listOf(
-			stringResource(R.string.theme_system),
-			stringResource(R.string.theme_dark),
-			stringResource(R.string.theme_light),
-			stringResource(R.string.theme_dynamic),
-			stringResource(R.string.theme_dark_pure)
-		),
-		selectedIndex = s.theme.coerceIn(ThemePref.SYSTEM, ThemePref.DARK_PURE),
-		onSelectedIndexChange = vm::setTheme
-	)
-	// 原「竖屏列数 / 横屏列数」两个滑块已删除：
-	// 它们只写进偏好、**没有任何地方读取**（应用页早已是单列列表，不再有网格），
-	// 拖动完全不产生效果 —— 留着只会让人以为布局坏了。
-	Toggle(
-		stringResource(R.string.play_text_animations),
-		checked = s.playTextAnimations,
-		onChange = vm::setPlayTextAnimations
-	)
-}
-
-// ---------------------------------------------------------------- 工具与关于
-
-@Composable
-private fun ToolsSection(vm: SettingsViewModel) {
-	SmallTitle(stringResource(R.string.settings_utils))
-	ArrowPreference(
-		title = stringResource(R.string.copy_app_list),
-		onClick = { vm.copyAppList() }
-	)
-}
 
 /**
- * 关于。
+ * 设置主页面：现在只有「入口」，没有任何具体设置项。
  *
- * 此前这一行是**没有 onClick 的 ArrowPreference** —— 界面上画了一个表示"可进入"的箭头，
- * 点击却什么都不发生，用户看到的就是「关于界面打不开」。
- * 现在点开一个真正的关于弹窗：版本、包名、上游项目、本仓库、开源许可，链接可点。
+ * ### 为什么这么改
+ * 原来这里平铺了 11 个分组、约 40 个控件，其中真正每天会碰的不到 5 个
+ * （安装方式、定时检查、主题）。其余是「配一次就不再看」的参数
+ * （各镜像线路、代理、MCP 端口、11 个来源开关）。把它们和常用项放在同一层级的后果是：
+ * 打开设置要先滚动过 20 行才能摸到「安装方式」。
+ *
+ * 改法参照 AppMarket（MIUI 系）的做法：**主页面只做索引，细节进二级页**。
+ * 另外把每个分组的控件套进 [SettingsGroup]（Card）—— Miuix 的 Preference 默认平铺，
+ * 40 条控件在屏幕上连成一片，根本看不出哪几项是一组。
+ *
+ * ### 副标题的取舍
+ * 每个入口都带一句 summary，说明「进去能看到什么、当前是什么状态」，
+ * 例如「安装方式 · 自动」「已启用 3 / 11 个来源」。这样即使不进二级页，
+ * 也能在这里判断要不要进 —— 这是把 40 项收成 9 项后必须补的信息密度。
  */
 @Composable
-private fun AboutSection() {
-	SmallTitle(stringResource(R.string.about))
+fun SettingsScreen(
+	viewModel: SettingsViewModel,
+	onNavigate: (String) -> Unit
+) {
+	val s = viewModel.state().collectAsStateWithLifecycle().value
+	val mcp by viewModel.mcpState().collectAsStateWithLifecycle()
 
-	var showAbout by remember { mutableStateOf(false) }
-
-	ArrowPreference(
-		title = stringResource(R.string.app_name),
-		summary = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-		onClick = { showAbout = true }
+	// 11 个来源开关的启用数，两个入口共用一个统计
+	val sourceFlags = listOf(
+		s.useGitHub, s.useFdroid, s.useIzzy, s.useGitLab, s.useAptoide, s.useApkPure,
+		s.useVivo, s.useXiaomi, s.useTencent, s.useApkMirror, s.usePlay
 	)
+	val onCount = sourceFlags.count { it }
+	val sourceCountText = stringResource(R.string.sources_enabled_count, onCount, sourceFlags.size)
 
-	if (showAbout) AboutDialog(onDismiss = { showAbout = false })
-}
+	Column {
+		SmallTopAppBar(title = stringResource(R.string.tab_settings))
 
-@Composable
-private fun AboutDialog(onDismiss: () -> Unit) {
-	val context = LocalContext.current
-
-	OverlayDialog(
-		show = true,
-		title = stringResource(R.string.about),
-		onDismissRequest = onDismiss
-	) {
-		Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-			AboutRow(stringResource(R.string.about_version), "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-			AboutRow(stringResource(R.string.about_package), context.packageName)
-			AboutLink(
-				label = stringResource(R.string.about_upstream),
-				value = UPSTREAM_URL,
-				context = context
-			)
-			AboutLink(
-				label = stringResource(R.string.about_project),
-				value = PROJECT_URL,
-				context = context
-			)
-			AboutRow(stringResource(R.string.about_license), "GPL-3.0")
-			Text(
-				text = stringResource(R.string.about_based_on),
-				style = MiuixTheme.textStyles.footnote2,
-				color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-				modifier = Modifier.padding(top = 6.dp)
-			)
-		}
-		Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-			Text(stringResource(R.string.close))
-		}
-	}
-}
-
-private const val UPSTREAM_URL = "https://github.com/rumboalla/apkupdater"
-private const val PROJECT_URL = "https://github.com/MCheng404/onekey-updater"
-
-@Composable
-private fun AboutRow(label: String, value: String) = Row(
-	modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-	horizontalArrangement = Arrangement.SpaceBetween
-) {
-	Text(label, style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-	Text(value, style = MiuixTheme.textStyles.footnote1)
-}
-
-/** 链接行：点击直接在浏览器打开，避免用户手动抄地址。 */
-@Composable
-private fun AboutLink(label: String, value: String, context: android.content.Context) = Row(
-	modifier = Modifier
-		.fillMaxWidth()
-		.padding(vertical = 3.dp)
-		.clickable {
-			runCatching {
-				context.startActivity(
-					android.content.Intent(android.content.Intent.ACTION_VIEW, value.toUri())
-						.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-				)
-			}
-		},
-	horizontalArrangement = Arrangement.SpaceBetween
-) {
-	Text(label, style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-	Text(value, style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.primary)
-}
-
-// ---------------------------------------------------------------- 网络诊断
-
-@Composable
-private fun DiagnosticsDialog(
-	state: SettingsViewModel.DiagnosticsState,
-	onRerun: () -> Unit,
-	onOptimize: () -> Unit,
-	onDismiss: () -> Unit
-) = OverlayDialog(
-	show = true,
-	title = stringResource(R.string.network_diagnostics),
-	summary = stringResource(R.string.network_diagnostics_summary),
-	onDismissRequest = onDismiss
-) {
-	Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-		// 结果区必须自己限高并可滚动：诊断一次会返回近百条线路，
-		// 之前结果直接把下面的按钮挤出弹窗、而且整体推不动，用户根本点不到按钮。
-		// 现在把滚动限制在结果区内部，按钮固定在其下方。
-		Column(
-			modifier = Modifier
-				.fillMaxWidth()
-				.heightIn(max = 360.dp)
-				.verticalScroll(rememberScrollState()),
-			verticalArrangement = Arrangement.spacedBy(6.dp)
+		LazyColumn(
+			modifier = Modifier.fillMaxSize(),
+			state = rememberLazyListState(),
+			contentPadding = PaddingValues(bottom = 32.dp)
 		) {
-		when (state) {
-			SettingsViewModel.DiagnosticsState.Idle ->
-				Text(stringResource(R.string.diagnostics_hint))
-
-			SettingsViewModel.DiagnosticsState.Running ->
-				Text(stringResource(R.string.diagnostics_running))
-
-			is SettingsViewModel.DiagnosticsState.Done -> {
-				// 分组 + 最快优先 + 每组只显示前若干条。
-				// 接入 78 个 GitHub 节点后，平铺列表会长到没法看；而这个界面的目的
-				// 只是「挑一条能用的、最快的」，所以按类别收起、按延迟排序最有价值。
-				val byKind = state.results.groupBy { it.kind }
-				listOf(
-					NetworkDiagnostics.Kind.GITHUB,
-					NetworkDiagnostics.Kind.FDROID,
-					NetworkDiagnostics.Kind.SOURCE
-				).forEach { kind ->
-					val items = byKind[kind] ?: return@forEach
-					val sorted = items.sortedWith(compareBy({ !it.ok }, { it.millis }))
-					val best = sorted.firstOrNull { it.ok }
-					val usable = sorted.count { it.ok }
-
-					Text(
-						text = diagnosticsKindLabel(kind) + "  ·  " +
-							stringResource(R.string.diagnostics_usable_count, usable, items.size),
-						style = MiuixTheme.textStyles.footnote2,
-						color = MiuixTheme.colorScheme.primary,
-						modifier = Modifier.padding(top = 10.dp)
+			// ---- 更新来源：11 个开关全塞进一个列表没人受得了，移进二级页 ----
+			item {
+				SmallTitle(stringResource(R.string.settings_group_update))
+				SettingsGroup {
+					ArrowPreference(
+						title = stringResource(R.string.settings_sources),
+						summary = sourceCountText,
+						onClick = { onNavigate(SettingsRoute.SOURCES) }
 					)
-					Text(
-						text = if (best != null) {
-							stringResource(R.string.diagnostics_fastest, best.label, best.millis)
+					ArrowPreference(
+						title = stringResource(R.string.settings_filter),
+						summary = filterSummary(s),
+						onClick = { onNavigate(SettingsRoute.FILTER) }
+					)
+				}
+			}
+
+			// ---- 安装 ----
+			item {
+				SmallTitle(stringResource(R.string.settings_group_install))
+				SettingsGroup {
+					ArrowPreference(
+						title = stringResource(R.string.settings_install),
+						summary = stringResource(
+							when (s.installMode) {
+								0 -> R.string.install_mode_auto
+								1 -> R.string.install_mode_session
+								else -> R.string.install_mode_root
+							}
+						),
+						onClick = { onNavigate(SettingsRoute.INSTALL) }
+					)
+				}
+			}
+
+			// ---- 网络 ----
+			item {
+				SmallTitle(stringResource(R.string.settings_group_network))
+				SettingsGroup {
+					ArrowPreference(
+						title = stringResource(R.string.settings_china_sources),
+						summary = stringResource(
+							R.string.network_summary, viewModel.effectiveGithubPrefix()
+						),
+						onClick = { onNavigate(SettingsRoute.NETWORK) }
+					)
+					ArrowPreference(
+						title = stringResource(R.string.settings_proxy),
+						summary = if (s.proxyEnabled) {
+							proxySummary(s)
 						} else {
-							stringResource(R.string.diagnostics_none_usable)
+							stringResource(R.string.proxy_off_summary)
 						},
-						style = MiuixTheme.textStyles.footnote1,
-						color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+						onClick = { onNavigate(SettingsRoute.PROXY) }
 					)
+				}
+			}
 
-					sorted.take(DIAGNOSTICS_MAX_ROWS).forEach { DiagnosticsRow(it) }
-					if (sorted.size > DIAGNOSTICS_MAX_ROWS) {
-						Text(
-							text = stringResource(
-								R.string.diagnostics_more_hidden,
-								sorted.size - DIAGNOSTICS_MAX_ROWS
-							),
-							style = MiuixTheme.textStyles.footnote2,
-							color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-						)
-					}
+			// ---- 自动化 ----
+			item {
+				SmallTitle(stringResource(R.string.settings_group_automation))
+				SettingsGroup {
+					ArrowPreference(
+						title = stringResource(R.string.settings_alarm),
+						summary = if (s.enableAlarm) {
+							stringResource(R.string.alarm_on_summary, s.alarmHour)
+						} else {
+							stringResource(R.string.alarm_off_summary)
+						},
+						onClick = { onNavigate(SettingsRoute.ALARM) }
+					)
+					ArrowPreference(
+						title = stringResource(R.string.mcp_service),
+						summary = when {
+							mcp.error != null -> stringResource(R.string.mcp_status_error)
+							mcp.running -> stringResource(
+								R.string.mcp_running_summary, mcp.boundAddress, mcp.port
+							)
+							else -> stringResource(R.string.mcp_status_stopped)
+						},
+						onClick = { onNavigate(SettingsRoute.MCP) }
+					)
+				}
+			}
+
+			// ---- 其他 ----
+			item {
+				SmallTitle(stringResource(R.string.settings_group_other))
+				SettingsGroup {
+					ArrowPreference(
+						title = stringResource(R.string.settings_ui),
+						summary = stringResource(R.string.appearance_summary, themeLabel(s.theme)),
+						onClick = { onNavigate(SettingsRoute.APPEARANCE) }
+					)
+					ArrowPreference(
+						title = stringResource(R.string.app_name),
+						summary = versionText(),
+						onClick = { onNavigate(SettingsRoute.ABOUT) }
+					)
+					// 复制应用列表是独立工具，不属于任何设置分组，也不值得单开一页，
+					// 所以留在主页面末尾。原先它独占一个「工具」分组标题，
+					// 为一个条目单开标题反而显得空。
+					ArrowPreference(
+						title = stringResource(R.string.copy_app_list),
+						onClick = { viewModel.copyAppList() }
+					)
 				}
 			}
 		}
-		}
-
-		// ---- 修复 #3：按钮合并为「优化线路」 ----
-		// 原先要用户分别点「使用最快 GitHub 线路」和「使用最快 F-Droid 线路」两次，
-		// 而且按钮被结果挤下去还推不动。现在一次把两类都调到实测最快的线路。
-		Row(
-			modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-			horizontalArrangement = Arrangement.spacedBy(10.dp),
-			verticalAlignment = Alignment.CenterVertically
-		) {
-			TextButton(text = stringResource(R.string.diagnostics_rerun), onClick = onRerun)
-			TextButton(text = stringResource(R.string.diagnostics_optimize), onClick = onOptimize)
-		}
-		Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-			Text(stringResource(R.string.close))
-		}
 	}
 }
 
+/** 过滤摘要：把三个「是否忽略某类版本」压成一句人话，全关时显示「不过滤」。 */
 @Composable
-private fun DiagnosticsRow(result: NetworkDiagnostics.Result) = Row(
-	modifier = Modifier.fillMaxWidth(),
-	verticalAlignment = Alignment.CenterVertically
-) {
-	Text(
-		text = if (result.ok) "✓" else "✕",
-		color = if (result.ok) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.error,
-		style = MiuixTheme.textStyles.body1
-	)
-	Text(
-		text = "  " + result.label,
-		style = MiuixTheme.textStyles.body2,
-		maxLines = 1,
-		overflow = TextOverflow.Ellipsis,
-		modifier = Modifier.weight(1f)
-	)
-	Text(
-		text = if (result.ok) result.millis.toString() + " ms" else result.detail,
-		style = MiuixTheme.textStyles.footnote1,
-		color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-		maxLines = 1,
-		modifier = Modifier.widthIn(max = 130.dp)
-	)
+private fun filterSummary(s: SettingsSnapshot): String {
+	val active = buildList {
+		if (s.ignoreAlpha) add(stringResource(R.string.ignore_alpha))
+		if (s.ignoreBeta) add(stringResource(R.string.ignore_beta))
+		if (s.ignorePreRelease) add(stringResource(R.string.ignore_preRelease))
+	}
+	return if (active.isEmpty()) {
+		stringResource(R.string.filter_none_summary)
+	} else {
+		active.joinToString("、")
+	}
 }
 
-/** 诊断结果每组最多显示多少条。 */
-private const val DIAGNOSTICS_MAX_ROWS = 8
-
+/** 代理摘要：只显示类型与端口，不回显主机（主机可能很长，会把摘要撑到两行）。 */
 @Composable
-private fun diagnosticsKindLabel(kind: NetworkDiagnostics.Kind): String = when (kind) {
-	NetworkDiagnostics.Kind.GITHUB -> stringResource(R.string.diagnostics_group_github)
-	NetworkDiagnostics.Kind.FDROID -> stringResource(R.string.diagnostics_group_fdroid)
-	NetworkDiagnostics.Kind.SOURCE -> stringResource(R.string.diagnostics_group_source)
+private fun proxySummary(s: SettingsSnapshot): String {
+	val type = stringResource(
+		if (s.proxyType == 1) R.string.proxy_type_socks else R.string.proxy_type_http
+	)
+	val port = s.proxyPort
+	return if (port in 1..65535) "$type · $port" else type
 }
 
-// ---------------------------------------------------------------- 代理
-
-/**
- * 自定义代理。
- *
- * 为什么不做成「跟随系统」：系统代理对 App 是否生效取决于厂商实现，不可控；
- * 用户想要的是「我配了就一定走」。实现在 OkHttp 层，因此更新检查、下载、图标加载
- * 三条链路一起生效，不需要在各处分别设置。
- */
+/** 主题名：与外观二级页的下拉选项文案保持一致，避免两处各写一份。 */
 @Composable
-private fun ProxySection(s: SettingsSnapshot, vm: SettingsViewModel) {
-	SmallTitle(stringResource(R.string.settings_proxy))
-
-	Toggle(
-		stringResource(R.string.proxy_enabled),
-		summary = stringResource(R.string.proxy_enabled_summary),
-		checked = s.proxyEnabled,
-		onChange = vm::setProxyEnabled
-	)
-
-	if (!s.proxyEnabled) return
-
-	WindowDropdownPreference(
-		title = stringResource(R.string.proxy_type),
-		summary = stringResource(R.string.proxy_type_summary),
-		items = listOf(
-			stringResource(R.string.proxy_type_http),
-			stringResource(R.string.proxy_type_socks)
-		),
-		selectedIndex = s.proxyType.coerceIn(0, 1),
-		onSelectedIndexChange = vm::setProxyType
-	)
-
-	CustomUrlField(
-		value = s.proxyHost,
-		label = stringResource(R.string.proxy_host),
-		onValueChange = vm::setProxyHost
-	)
-
-	ProxyPortField(s.proxyPort, vm)
-}
-
-@Composable
-private fun ProxyPortField(current: Int, vm: SettingsViewModel) {
-	// 本地文本态：输入过程中不逐字符落库，避免"刚敲一位就被当成端口提交"
-	var text by remember(current) { mutableStateOf(if (current in 1..65535) current.toString() else "") }
-
-	TextField(
-		value = text,
-		onValueChange = { input ->
-			val cleaned = input.filter { it.isDigit() }.take(5)
-			text = cleaned
-			val v = cleaned.toIntOrNull()
-			if (v != null && v in 1..65535) {
-				vm.setProxyPort(v)
-			} else if (cleaned.length >= 4) {
-				// 只在明显非法时才提示，避免输入途中反复刷 snackbar
-				vm.notifyProxyPortInvalid()
-			}
-		},
-		modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-		label = stringResource(R.string.proxy_port),
-		useLabelAsPlaceholder = true,
-		singleLine = true
-	)
-}
+private fun themeLabel(theme: Int): String = stringResource(
+	when (theme) {
+		1 -> R.string.theme_dark
+		2 -> R.string.theme_light
+		3 -> R.string.theme_dynamic
+		4 -> R.string.theme_dark_pure
+		else -> R.string.theme_system
+	}
+)

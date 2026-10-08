@@ -75,6 +75,9 @@ class XiaomiRepository(
 		/** 官方 Xiaomi Market 客户端的 marketVersion（AppMarket 的 XiaomiProtocol.VERSION_CODE）。 */
 		private const val MARKET_VERSION_CODE = "40007460"
 
+		/** 下载元数据端点（官方客户端通路）。 */
+		private const val DOWNLOAD_ENDPOINT = "https://app.market.xiaomi.com/apm/download"
+
 		private const val UPDATE_ENDPOINT = "https://updateinfo.market.xiaomi.com/apm/updateinfo/v2"
 
 		/**
@@ -239,7 +242,12 @@ class XiaomiRepository(
 				// 客户端的 /apm/download 被 downloadCtl 管控（实测带真实 OAID、完整签名、
 				// 调用方冒充、Android TLS 一律返回 apks=[]），因此改从**网页版详情页**取直链 ——
 				// 那是另一条完全公开、无需签名的通路。
-				link = resolveDownload(local.packageName),
+				link = resolveDownload(
+					remote.appId.toString(),
+					local.packageName,
+					local.versionCode,
+					local.version
+				),
 				whatsNew = remote.changeLog.ifBlank { remote.briefShow }
 			)
 		}
@@ -251,7 +259,67 @@ class XiaomiRepository(
 	 * 页面给的 URL 是 http（CDN 同对象支持 https），且 CDN 开启防盗链 ——
 	 * 缺 `Referer: https://sj.qq.com/` 会返回一段 JS 而不是 APK，因此 referer 必须带上。
 	 */
-	private suspend fun resolveDownload(packageName: String): Link {
+	/** 通过官方 /apm/download 取 APK 直链；失败返回 null 交由网页版兜底。 */
+	private suspend fun resolveDownloadFromApi(
+		appId: String,
+		packageName: String,
+		versionCode: Long,
+		versionName: String
+	): Link? = runCatching {
+		if (appId.isBlank() || appId == "0") return@runCatching null
+		// 复用 baseParams 拿到同一套设备 profile，保证下载请求与更新检查请求自洽
+		val params = baseParams(
+			listOf(AppInstalled(name = packageName, packageName = packageName,
+				version = versionName, versionCode = versionCode)),
+			emptyList()
+		).toMutableMap()
+		params.putAll(
+			mapOf(
+				"appId" to appId, "pName" to packageName, "packageName" to packageName,
+				"ref" to "upgrade", "sourcePackage" to "com.miui.home", "pageRef" to "com.miui.home",
+				"bundleType" to "main", "supportCompressType" to "1", "supportModifyUrl" to "true",
+				"supportSdm" to "true", "supportSpeedInstall" to "true", "useCache" to "false",
+				"downloadGrantType" to "0", "autoUpdateEnabled" to "false", "ad" to "0",
+				"versionCode" to versionCode.toString(), "versionName" to versionName,
+				"taskStartTime" to System.currentTimeMillis().toString()
+			)
+		)
+		val query = params.entries.joinToString("&") { (k, v) ->
+			"$k=" + URLEncoder.encode(v, "UTF-8")
+		}
+		val json = service.downloadMeta(
+			XiaomiSigner.signedUrl("$DOWNLOAD_ENDPOINT/$appId?$query")
+		)
+		val apks = json.getAsJsonArray("apks") ?: return@runCatching null
+		if (apks.size() == 0) {
+			Log.i(TAG, "/apm/download 未返回 APK：$packageName appId=$appId")
+			return@runCatching null
+		}
+		val first = apks[0].asJsonObject
+		val relative = first.get("url")?.asString.orEmpty()
+		val host = json.get("host")?.asString?.takeIf { it.isNotBlank() }
+			?: "https://fgb0.market.xiaomi.com/download/"
+		val url = if (relative.startsWith("http")) relative else host.trimEnd('/') + "/" + relative.trimStart('/')
+		Log.i(TAG, "/apm/download 取到直链：$packageName -> ${url.take(60)}")
+		Link.Url(url, remote0Size(json), "https://app.mi.com/")
+	}.getOrNull()
+
+	private fun remote0Size(json: com.google.gson.JsonObject): Long = runCatching {
+		json.get("apkSizeV2")?.asLong ?: json.get("apkSize")?.asLong ?: 0L
+	}.getOrDefault(0L)
+
+	private suspend fun resolveDownload(
+		appId: String,
+		packageName: String,
+		versionCode: Long,
+		versionName: String
+	): Link {
+		// 优先走客户端官方通路 /apm/download。
+		// 早前判定它被 downloadCtl 管控、恒返回空 apks，但那次是在 profile 不自洽时测的
+		// （对服务端谎报「Android 17 + MIUI 8.16」）；profile 修正后这条路应当已恢复，
+		// 而且它比网页版可靠 —— 网页版详情页现已 302 重定向回首页。
+		resolveDownloadFromApi(appId, packageName, versionCode, versionName)?.let { return it }
+
 		val detail = webDetail.fetch(packageName)
 		if (detail == null || detail.downloadUrl.isBlank()) {
 			Log.i(TAG, "未取到 $packageName 的下载地址，该条目仅供查看版本")

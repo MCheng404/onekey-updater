@@ -20,6 +20,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.onekey.updater.data.ui.Screen
+import com.onekey.updater.data.ui.SettingsRoute
 import com.onekey.updater.ui.theme.AppTheme
 import com.onekey.updater.util.Badger
 import com.onekey.updater.util.SnackBar
@@ -149,5 +150,38 @@ fun NavHost(
 	composable(Screen.Apps.route) { AppsScreen(appsViewModel) }
 	composable(Screen.Search.route) { SearchScreen(searchViewModel) }
 	composable(Screen.Updates.route) { UpdatesScreen(updatesViewModel) }
-	composable(Screen.Settings.route) { SettingsScreen(settingsViewModel) }
+	composable(Screen.Settings.route) {
+		SettingsScreen(settingsViewModel, onNavigate = { navController.navigate(it) })
+	}
+
+	// ---- 设置二级页 ----
+	// 全部注册在同一层级（不进 bottomBar），返回键直接 pop 回设置主页面。
+	// 路由常量集中在 SettingsRoute，避免字符串散落在两处写错。
+	composable(SettingsRoute.SOURCES) {
+		SourcesSettingsPage(settingsViewModel) { navController.popBackStack() }
+	}
+	composable(SettingsRoute.FILTER) {
+		FilterSettingsPage(settingsViewModel) { navController.popBackStack() }
+	}
+	composable(SettingsRoute.INSTALL) {
+		InstallSettingsPage(settingsViewModel) { navController.popBackStack() }
+	}
+	composable(SettingsRoute.NETWORK) {
+		NetworkSettingsPage(settingsViewModel) { navController.popBackStack() }
+	}
+	composable(SettingsRoute.PROXY) {
+		ProxySettingsPage(settingsViewModel) { navController.popBackStack() }
+	}
+	composable(SettingsRoute.MCP) {
+		McpSettingsPage(settingsViewModel) { navController.popBackStack() }
+	}
+	composable(SettingsRoute.ALARM) {
+		AlarmSettingsPage(settingsViewModel) { navController.popBackStack() }
+	}
+	composable(SettingsRoute.APPEARANCE) {
+		AppearanceSettingsPage(settingsViewModel) { navController.popBackStack() }
+	}
+	composable(SettingsRoute.ABOUT) {
+		AboutSettingsPage { navController.popBackStack() }
+	}
 }
