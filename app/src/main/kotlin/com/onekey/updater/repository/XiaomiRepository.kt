@@ -72,6 +72,9 @@ class XiaomiRepository(
 		const val MIUI_ANCHOR = "com.miui.core"
 
 		/** 更新检查端点（与官方客户端一致，lo=CN 走国内线路）。 */
+		/** 官方 Xiaomi Market 客户端的 marketVersion（AppMarket 的 XiaomiProtocol.VERSION_CODE）。 */
+		private const val MARKET_VERSION_CODE = "40007460"
+
 		private const val UPDATE_ENDPOINT = "https://updateinfo.market.xiaomi.com/apm/updateinfo/v2"
 
 		/**
@@ -283,18 +286,21 @@ class XiaomiRepository(
 			put("network", "unknown")
 			put("newUser", "false")
 			put("deviceType", "0")
-			put("hasGMSCore", "false")
 			put("activedTimeInterval", "1")
 			put("installDay", "1")
 			put("launchDay", "1")
 			put("instance_id", instanceId)
-			put("marketVersion", "V816")
-			put("miuiBigVersionCode", "V816")
+			// 这几个「客户端版本」字段此前一律填占位值（1 / V816），
+			// 等于告诉服务端「我是个刚上线的自制客户端」——官方 Market 的真实取值如下，
+			// 对齐后服务端才会按正常客户端对待（miuiApp 通道的准入条件之一）。
+			put("marketVersion", MARKET_VERSION_CODE)     // 40007460，此前错填成 V816
+			put("miuiBigVersionCode", "816")              // 纯数字，此前错填成 V816
 			put("miuiBigVersionName", "V816")
-			put("pageConfigVersion", "1")
-			put("webResVersion", "1")
-			put("hybridFrameworkVersion", "1")
-			put("supportedIslandVersion", "1")
+			put("pageConfigVersion", "18432101")         // 此前填 1
+			put("webResVersion", "3193")                  // 此前填 1
+			put("hybridFrameworkVersion", "13170201")     // 此前填 1
+			put("supportedIslandVersion", "3")            // 此前填 1
+			put("hasGMSCore", "true")                     // 此前填 false
 			// 设备标识：优先用本应用真实的 OAID（按应用分发，只能反射取），
 			// 取不到才回落到稳定占位值 —— 服务端不认可占位值，也就不会下发 dctx。
 			put("oaId", XiaomiIdentity.oaId(context, prefs))
