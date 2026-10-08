@@ -21,6 +21,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import java.net.URLEncoder
 import java.util.UUID
 
 /**
@@ -69,6 +70,9 @@ class XiaomiRepository(
 		 * 响应回来后与真实已装包对账，标记包本身不会成为可见更新。
 		 */
 		const val MIUI_ANCHOR = "com.miui.core"
+
+		/** 更新检查端点（与官方客户端一致，lo=CN 走国内线路）。 */
+		private const val UPDATE_ENDPOINT = "https://updateinfo.market.xiaomi.com/apm/updateinfo/v2"
 
 		/**
 		 * 小米应用商店风格的 User-Agent。
@@ -145,7 +149,13 @@ class XiaomiRepository(
 		// 注意：User-Agent 由 di/MainModule 里小米的**独立客户端**注入。
 		// 这里不能再用 @Header 传 —— OkHttp 拦截器在 Retrofit 组装请求之后才跑，
 		// 会把 @Header 覆盖掉（这正是之前 miuiApp 通道一直空的原因）。
-		val response = service.checkUpdates(baseParams(chunk, listOf(dctx)))
+		// 拼完整 query 后整体签名。签名缺失或不对时服务端**不报错**，
+		// 而是静默返回空列表 —— 这正是此前「返回条目 0、商店未收录 N」的真正原因。
+		val query = baseParams(chunk, listOf(dctx))
+			.entries
+			.joinToString("&") { (k, v) -> "$k=${URLEncoder.encode(v, "UTF-8")}" }
+		val signed = XiaomiSigner.signedUrl("$UPDATE_ENDPOINT?$query")
+		val response = service.checkUpdates(signed)
 
 		// 小米被风控/拦参时返回的是 HTTP 200 + errCode，而不是 4xx/5xx ——
 		// 不显式判断的话，这个响应会被解析成「listApp 为空」，表现与「确实没有更新」
@@ -312,6 +322,10 @@ class XiaomiRepository(
 			put("callerPackageName", "com.xiaomi.market")
 			put("sourcePackage", "com.xiaomi.market")
 
+			// 注意：apkSource / splits / oldApkHash / installedByMarket 试过改成
+			// 「与 packageName 等长的逗号对齐数组」（官方协议看起来是这么组织的），
+			// 结果反而**一条都返回不了**；恢复成单个空字符串后立刻能命中。
+			// 所以这几个字段按空值发即可，不要自作聪明补占位。
 			put("oldApkHash", "")
 			// 追加 MIUI 标记包以激活 miuiApp 通道（版本号 0 = 不假装知道已装版本）
 			put("packageName", (chunk.map { it.packageName } + MIUI_ANCHOR).joinToString(","))
@@ -320,6 +334,7 @@ class XiaomiRepository(
 			put("apkSource", "")
 			put("splits", "")
 			put("installedByMarket", "")
+
 		}
 	}
 }

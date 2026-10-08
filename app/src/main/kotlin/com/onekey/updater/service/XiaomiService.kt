@@ -2,7 +2,7 @@ package com.onekey.updater.service
 
 import com.onekey.updater.data.xiaomi.XiaomiUpdateResponse
 import retrofit2.http.POST
-import retrofit2.http.QueryMap
+import retrofit2.http.Url
 
 interface XiaomiService {
 
@@ -14,6 +14,11 @@ interface XiaomiService {
      *
      * 该端点实测**不需要签名**。
      */
-    @POST("apm/updateinfo/v2")
-    suspend fun checkUpdates(@QueryMap params: Map<String, String>): XiaomiUpdateResponse
+    /**
+     * 注意：这里用 `@Url` 接收**已签名**的完整 URL，而不是 `@QueryMap`。
+     * 小米要求 URL 尾部带 `_n`/`_s`/`_v`，签名必须覆盖最终拼出来的完整 query，
+     * 所以没法交给 Retrofit 自己拼 —— 只能先拼好、签好、再整体传进来。
+     */
+    @POST
+    suspend fun checkUpdates(@Url url: String): XiaomiUpdateResponse
 }
