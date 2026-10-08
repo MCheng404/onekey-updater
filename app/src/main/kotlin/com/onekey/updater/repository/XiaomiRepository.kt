@@ -102,6 +102,22 @@ class XiaomiRepository(
 		private const val BATCH = 40
 	}
 
+	/**
+	 * 反射读取 Android 系统属性。
+	 *
+	 * 小米服务端会校验设备 profile 的自洽性：Android 版本、HyperOS 版本、
+	 * MIUI 版本、机型、Build.ID 必须互相匹配。填占位值会被判定为不可信客户端，
+	 * 后果是 **listApp 照常返回、但 miuiApp（MIUI 自带应用）通道静默不下发**。
+	 *
+	 * `android.os.SystemProperties` 属于非 SDK API，用反射取；
+	 * 取不到时由调用方回落到默认值。
+	 */
+	private fun xiaomiSystemProperty(key: String): String = runCatching {
+		Class.forName("android.os.SystemProperties")
+			.getMethod("get", String::class.java, String::class.java)
+			.invoke(null, key, "") as? String
+	}.getOrNull().orEmpty()
+
 	/** 本次运行内稳定的伪随机 id，充当 instance_id / sid。 */
 	private val instanceId: String = UUID.randomUUID().toString().replace("-", "").take(16)
 
@@ -273,8 +289,10 @@ class XiaomiRepository(
 			put("sdk", Build.VERSION.SDK_INT.toString())
 			put("androidVersion", release)
 			put("osV2", release)
-			put("osBigVersionCode", Build.VERSION.SDK_INT.toString())
-			put("osBigVersionName", release)
+			// 这两个是 **HyperOS 的版本**（ro.mi.os.version.*），不是 Android 的版本。
+			// 此前误填成 SDK_INT / RELEASE，等于对服务端说「Android 17 上跑着 OS3.0-era 的接口」。
+			put("osBigVersionCode", xiaomiSystemProperty("ro.mi.os.version.code").ifBlank { "3" })
+			put("osBigVersionName", xiaomiSystemProperty("ro.mi.os.version.name").ifBlank { "OS3.0" })
 			put("cpuArchitecture", Build.SUPPORTED_ABIS.firstOrNull().orEmpty())
 			put("resolution", metrics.widthPixels.toString() + "x" + metrics.heightPixels)
 			put("densityDpi", metrics.densityDpi.toString())
@@ -294,8 +312,12 @@ class XiaomiRepository(
 			// 等于告诉服务端「我是个刚上线的自制客户端」——官方 Market 的真实取值如下，
 			// 对齐后服务端才会按正常客户端对待（miuiApp 通道的准入条件之一）。
 			put("marketVersion", MARKET_VERSION_CODE)     // 40007460，此前错填成 V816
-			put("miuiBigVersionCode", "816")              // 纯数字，此前错填成 V816
-			put("miuiBigVersionName", "V816")
+			// 必须读真机版本。此前硬编码 816/V816（MIUI 8.16，2020 年的版本），
+			// 与本机的 Android 17 / HyperOS 组合起来「世上不存在」，
+			// 服务端会据此判定 profile 不可信，进而**静默不下发 miuiApp 通道**
+			//（表现就是时钟、录音机这类自带应用永远查不到更新，而商店应用正常）。
+			put("miuiBigVersionCode", xiaomiSystemProperty("ro.miui.ui.version.code").ifBlank { "816" })
+			put("miuiBigVersionName", xiaomiSystemProperty("ro.miui.ui.version.name").ifBlank { "V816" })
 			put("pageConfigVersion", "18432101")         // 此前填 1
 			put("webResVersion", "3193")                  // 此前填 1
 			put("hybridFrameworkVersion", "13170201")     // 此前填 1
