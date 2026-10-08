@@ -71,6 +71,22 @@ class XiaomiRepository(
 		const val MIUI_ANCHOR = "com.miui.core"
 
 		/**
+		 * 小米应用商店风格的 User-Agent。
+		 *
+		 * 关键在 `Build/<Build.ID>` 这一段必须与**真机**一致（服务端按它识别设备）。
+		 * 取不到 Build.ID 时退回 `Build.UNKNOWN` 之外的可用值，不留空 ——
+		 * 空 UA 会退化成 OkHttp 默认的 `okhttp/4.x`，服务端一律不认。
+		 */
+		@JvmStatic
+		fun xiaomiUserAgent(): String {
+			val release = Build.VERSION.RELEASE.orEmpty().ifBlank { Build.VERSION.SDK_INT.toString() }
+			val model = Build.MODEL.orEmpty().ifBlank { "Android" }
+			// Build.ID 在个别 ROM 上为空，兜底用系统构建号，至少保证 UA 结构完整
+			val buildId = Build.ID.orEmpty().ifBlank { Build.DISPLAY.orEmpty() }.ifBlank { "UNKNOWN" }
+			return "Dalvik/2.1.0 (Linux; U; Android $release; $model Build/$buildId)"
+		}
+
+		/**
 		 * 单批多少个应用。
 		 *
 		 * 完整参数集（设备指纹 + 能力开关）本身约 1400 字节，
@@ -126,6 +142,9 @@ class XiaomiRepository(
 		val dctx = XiaomiIdentity.cachedDctx(prefs).ifBlank {
 			XiaomiIdentity.ensureDctx(prefs) { baseParams(chunk, emptyList()) }.orEmpty()
 		}
+		// 注意：User-Agent 由 di/MainModule 里小米的**独立客户端**注入。
+		// 这里不能再用 @Header 传 —— OkHttp 拦截器在 Retrofit 组装请求之后才跑，
+		// 会把 @Header 覆盖掉（这正是之前 miuiApp 通道一直空的原因）。
 		val response = service.checkUpdates(baseParams(chunk, listOf(dctx)))
 
 		// 小米被风控/拦参时返回的是 HTTP 200 + errCode，而不是 4xx/5xx ——

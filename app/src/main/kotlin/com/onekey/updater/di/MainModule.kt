@@ -149,9 +149,22 @@ val mainModule = module {
 	single { TencentRepository(get(), get()) }
 
 	// 小米应用商店：baseUrl 固定为 updateinfo 主机，注意该端点只接受 POST
+	//
+	// **必须用独立客户端**，不能用共享的那个：共享客户端挂着
+	// `addUserAgentInterceptor("APKUpdater-v…")`，而 OkHttp 拦截器在 Retrofit
+	// 组装请求**之后**才执行，会把 Retrofit 上声明的 @Header("User-Agent") 覆盖掉。
+	// 小米服务端恰恰靠 UA 里的 `Build/<Build.ID>` 判定设备身份 ——
+	// UA 一旦变成 okhttp/4.x 或 APKUpdater-v…，miuiApp（MIUI 系统应用）通道
+	// 就永远不返回数据，表现为时钟/录音机这类自带应用查不到更新。
 	single {
+		val client = OkHttpClient.Builder()
+			.cache(get())
+			.addInterceptor(MirrorInterceptor(get()))
+			.addUserAgentInterceptor(XiaomiRepository.xiaomiUserAgent())
+			.build()
+
 		Retrofit.Builder()
-			.client(get())
+			.client(client)
 			.baseUrl("https://updateinfo.market.xiaomi.com")
 			.addConverterFactory(GsonConverterFactory.create(get()))
 			.build()
