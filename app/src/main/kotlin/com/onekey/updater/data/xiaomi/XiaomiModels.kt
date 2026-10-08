@@ -35,6 +35,9 @@ data class XiaomiUpdateResponse(
     /** 支持 64 位的应用。 */
     @SerializedName("support64Pkgs") val support64Packages: List<String> = emptyList(),
     /** 有更新的条目。传当前版本号时会是空数组——那是正确的「已是最新」，不是故障。 */
+    /** 服务端回传的「不收录系统包」哈希，握手用；下次请求原样带回。 */
+    @SerializedName("invalidSystemPackageHash") val invalidSystemPackageHash: String? = null,
+
     @SerializedName("listApp") val listApp: List<XiaomiApp> = emptyList(),
     /**
      * MIUI 系统应用更新。**需要请求里带 `com.miui.core|0|0` 标记包才会返回** ——

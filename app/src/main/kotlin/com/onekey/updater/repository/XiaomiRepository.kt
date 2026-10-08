@@ -169,6 +169,15 @@ class XiaomiRepository(
 			return emptyList()
 		}
 
+		// 完成握手：把服务端回传的 invalidSystemPackageHash 存下来，
+		// 下次请求带回。缺了这一步，系统包握手永远走不完，miuiApp 通道不会下发。
+		response.invalidSystemPackageHash?.takeIf { it.isNotBlank() }?.let {
+			if (prefs.xiaomiInvalidSystemHash.get() != it) {
+				prefs.xiaomiInvalidSystemHash.put(it)
+				Log.i(TAG, "已记录服务端系统包哈希 " + it.take(40))
+			}
+		}
+
 		val byPackage = chunk.associateBy { it.packageName }
 		Log.i(
 			TAG,
@@ -334,6 +343,12 @@ class XiaomiRepository(
 			put("apkSource", "")
 			put("splits", "")
 			put("installedByMarket", "")
+
+			// 系统包握手：首次发 "null"，服务端会在响应里回一个
+			// invalidSystemPackageHash（编码了「你哪些系统包我不收录」）；
+			// 存下来在后续请求带回，服务端确认我们已认领该清单后才下发 miuiApp。
+			// 这里只发「上次拿到的」，没有就按官方默认写字符串 "null"。
+			put("invalidSystemPackageHash", prefs.xiaomiInvalidSystemHash.get().ifBlank { "null" })
 
 		}
 	}

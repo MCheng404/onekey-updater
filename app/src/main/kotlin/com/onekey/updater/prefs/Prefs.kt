@@ -58,6 +58,9 @@ class Prefs(
 	/** 是否允许在无 root 时改用 Shizuku 做静默安装。 */
 	val useShizuku = boolean("useShizuku", defValue = true, backed = true)
 
+	/** 小米商店回传的「不收录系统包」哈希，下次请求原样带回以激活 miuiApp。 */
+	val xiaomiInvalidSystemHash = string("xiaomiInvalidSystemHash", defValue = "", backed = true)
+
 	/** 忽略应用前是否二次确认。可在设置里关闭。 */
 	val confirmIgnore = boolean("confirmIgnore", defValue = true, backed = true)
 	val enableAlarm = boolean("enableAlarm", defValue = false, backed = true)
