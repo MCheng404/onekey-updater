@@ -152,13 +152,13 @@ class XiaomiRepository(
 		// 注意：User-Agent 由 di/MainModule 里小米的**独立客户端**注入。
 		// 这里不能再用 @Header 传 —— OkHttp 拦截器在 Retrofit 组装请求之后才跑，
 		// 会把 @Header 覆盖掉（这正是之前 miuiApp 通道一直空的原因）。
-		// 拼完整 query 后整体签名。签名缺失或不对时服务端**不报错**，
-		// 而是静默返回空列表 —— 这正是此前「返回条目 0、商店未收录 N」的真正原因。
-		val query = baseParams(chunk, listOf(dctx))
-			.entries
-			.joinToString("&") { (k, v) -> "$k=${URLEncoder.encode(v, "UTF-8")}" }
-		val signed = XiaomiSigner.signedUrl("$UPDATE_ENDPOINT?$query")
-		val response = service.checkUpdates(signed)
+		// 签名必须与提交形态一致：官方客户端把 _n/_s/_v 放进 **POST 表单体**，
+		// 所以这里先签表单，再把签好的字段整表提交。
+		// （早先版本把签名放 URL query，服务端照收不误，但 miuiApp 通道不下发。）
+		val fields = baseParams(chunk, listOf(dctx))
+			.toMutableMap()
+			.apply { XiaomiSigner.signForm(URLEncoder.encode(UPDATE_ENDPOINT, "UTF-8"), this) }
+		val response = service.checkUpdates(fields)
 
 		// 小米被风控/拦参时返回的是 HTTP 200 + errCode，而不是 4xx/5xx ——
 		// 不显式判断的话，这个响应会被解析成「listApp 为空」，表现与「确实没有更新」
@@ -349,6 +349,18 @@ class XiaomiRepository(
 			put("apkSource", "")
 			put("splits", "")
 			put("installedByMarket", "")
+
+			// 以下字段对齐官方客户端 updateinfo 请求（AppMarket 的 updateInfoRequestFields）。
+			// 缺了它们服务端会走「非正规客户端」分支，miuiApp 通道静默不下发。
+			put("ref", "update")
+			put("autoUpdateEnabled", "false")
+			put("background", "false")
+			put("downloadRestriction", "1")
+			put("downloadRestrictionMode", "0")
+			put("privacyCompliance", "true")
+			put("rankTypeV2", "true")
+			put("showUnfitnessApp", "true")
+			put("session_id", instanceId + System.currentTimeMillis())
 
 			// 系统包握手：首次发 "null"，服务端会在响应里回一个
 			// invalidSystemPackageHash（编码了「你哪些系统包我不收录」）；

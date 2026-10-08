@@ -4,6 +4,7 @@ import kotlinx.coroutines.sync.withLock
 import android.util.Log
 import java.net.URLDecoder
 import java.security.MessageDigest
+import java.net.URLEncoder
 import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -62,6 +63,30 @@ object XiaomiSigner {
 	fun newNonce(): String = "${System.currentTimeMillis()}_${(0..999).random()}"
 
 	/** 给已带查询串的 URL 追加 `_n` / `_s` / `_v`，返回可直接请求的 URL。 */
+	/**
+	 * 表单签名：把 `_n` / `_s` / `_v` 追加进**待提交的字段表**。
+	 *
+	 * 官方客户端的 updateinfo 请求用的是表单体签名，不是 URL query 签名。
+	 * 两者不能混用：同样内容放 query 时服务端照收不误（能查到普通商店应用），
+	 * 但 **miuiApp（MIUI 自带应用）通道不下发**，时钟/录音机这类应用因此永远查不到。
+	 *
+	 * @param encodedUrl 已 URL 编码的端点（参与签名的是编码后的形态）
+	 * @param fields 待签字段，会被就地追加三个签名字段
+	 */
+	fun signForm(encodedUrl: String, fields: MutableMap<String, String>) {
+		val nonce = System.currentTimeMillis().toString() + "_" + (0..999).random()
+		// 签名覆盖「追加 _n 之前」的字段集
+		val sep = if (encodedUrl.contains("?")) "&" else "?"
+		val signatureUrl = if (fields.isEmpty()) encodedUrl else {
+			encodedUrl + sep + fields.entries.joinToString("&") { (k, v) ->
+				"$k=" + URLEncoder.encode(v, "UTF-8")
+			}
+		}
+		fields["_n"] = nonce
+		fields["_s"] = signature(signatureUrl, nonce)
+		fields["_v"] = "1"
+	}
+
 	fun signedUrl(baseUrl: String): String {
 		val nonce = newNonce()
 		val signature = signature(baseUrl, nonce)
